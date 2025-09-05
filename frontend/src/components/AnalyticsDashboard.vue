@@ -48,31 +48,58 @@
             <p>Duración</p>
           </div>
         </div>
-        <div class="card">
-          <div class="card-icon">📍</div>
+        <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="card">
+          <div class="card-icon">⏳</div>
           <div class="card-content">
-            <h3>{{ analysisData.summary.zones_count }}</h3>
-            <p>Zonas Activas</p>
+            <h3>{{ analysisData.dwell_time_analysis.summary.overall_average.toFixed(1) }}s</h3>
+            <p>Permanencia Promedio</p>
+          </div>
+        </div>
+        <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="card">
+          <div class="card-icon">🔢</div>
+          <div class="card-content">
+            <h3>{{ analysisData.dwell_time_analysis.summary.total_measured_visits }}</h3>
+            <p>Visitas Medidas</p>
           </div>
         </div>
       </div>
 
-      <!-- Gráficos -->
-      <div class="charts-grid">
-        <div class="chart-container">
+      <!-- Gráficos principales en primera fila -->
+      <div class="charts-grid main-charts">
+        <div class="chart-container large">
           <h3>📊 Distribución por Zonas</h3>
           <div class="chart-wrapper">
             <canvas ref="zoneChart"></canvas>
           </div>
         </div>
 
-        <div class="chart-container">
+        <div class="chart-container large">
           <h3>⏰ Actividad Temporal</h3>
           <div class="chart-wrapper">
             <canvas ref="timelineChart"></canvas>
           </div>
         </div>
+      </div>
 
+      <!-- Gráficos de tiempo de permanencia en segunda fila -->
+      <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="charts-grid dwell-charts">
+        <div class="chart-container medium">
+          <h3>⏳ Distribución de Tiempo de Permanencia</h3>
+          <div class="chart-wrapper">
+            <canvas ref="dwellDistributionChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-container medium">
+          <h3>🕐 Tiempo Promedio por Zona</h3>
+          <div class="chart-wrapper">
+            <canvas ref="dwellByZoneChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Información detallada en tercera fila -->
+      <div class="info-grid">
         <div class="chart-container">
           <h3>🔄 Transiciones entre Zonas</h3>
           <div class="flow-visualization">
@@ -109,23 +136,104 @@
             </div>
           </div>
         </div>
+
+        <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.by_zone" class="chart-container wide">
+          <h3>📊 Estadísticas de Permanencia por Zona</h3>
+          <div class="dwell-stats">
+            <div 
+              v-for="(zoneData, zoneName) in analysisData.dwell_time_analysis.by_zone" 
+              :key="zoneName"
+              class="dwell-stat-item"
+            >
+              <h4>{{ formatZoneName(zoneName) }}</h4>
+              <div class="dwell-details" v-if="typeof zoneData === 'object' && zoneData.average_dwell_time">
+                <p><strong>Tiempo promedio:</strong> {{ zoneData.average_dwell_time.toFixed(1) }}s</p>
+                <p><strong>Tiempo mediano:</strong> {{ zoneData.median_dwell_time.toFixed(1) }}s</p>
+                <p><strong>Visitas totales:</strong> {{ zoneData.total_visits }}</p>
+                <p><strong>Permanencia máxima:</strong> {{ zoneData.max_dwell_time.toFixed(1) }}s</p>
+                <p><strong>Permanencia mínima:</strong> {{ zoneData.min_dwell_time.toFixed(1) }}s</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Información adicional -->
       <div class="additional-info">
-        <div class="info-section">
-          <h3>🎯 Resumen de Actividad</h3>
-          <div class="activity-summary">
-            <p><strong>Pico de actividad:</strong> 
-              {{ analysisData.temporal_analysis.peak_activity.timestamp.toFixed(1) }}s 
-              ({{ analysisData.temporal_analysis.peak_activity.detections }} detecciones)
-            </p>
-            <p><strong>Promedio por segundo:</strong> 
-              {{ analysisData.temporal_analysis.average_detections_per_second.toFixed(2) }} detecciones/s
-            </p>
-            <p><strong>Tasa de detección:</strong> 
-              {{ analysisData.summary.detection_rate.toFixed(2) }} detecciones/frame
-            </p>
+        <div class="summary-row">
+          <div class="info-section activity-section">
+            <h3>🎯 Resumen de Actividad</h3>
+            <div class="activity-summary">
+              <div class="metric-item">
+                <span class="metric-label">Pico de actividad:</span>
+                <span class="metric-value">{{ analysisData.temporal_analysis.peak_activity.timestamp.toFixed(1) }}s 
+                  ({{ analysisData.temporal_analysis.peak_activity.detections }} detecciones)</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Promedio por segundo:</span>
+                <span class="metric-value">{{ analysisData.temporal_analysis.average_detections_per_second.toFixed(2) }} detecciones/s</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Tasa de detección:</span>
+                <span class="metric-value">{{ analysisData.summary.detection_rate.toFixed(2) }} detecciones/frame</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="info-section dwell-section">
+            <h3>⏳ Resumen de Tiempo de Permanencia</h3>
+            <div class="dwell-summary">
+              <div class="metric-item">
+                <span class="metric-label">Tiempo promedio global:</span>
+                <span class="metric-value">{{ analysisData.dwell_time_analysis.summary.overall_average.toFixed(1) }}s</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Tiempo mediano:</span>
+                <span class="metric-value">{{ analysisData.dwell_time_analysis.summary.overall_median.toFixed(1) }}s</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Permanencia más larga:</span>
+                <span class="metric-value">{{ analysisData.dwell_time_analysis.summary.longest_stay.toFixed(1) }}s</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Permanencia más corta:</span>
+                <span class="metric-value">{{ analysisData.dwell_time_analysis.summary.shortest_stay.toFixed(1) }}s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="distribution-overview">
+          <h3>📊 Distribución de Permanencias</h3>
+          <div class="distribution-cards">
+            <div class="dist-card short">
+              <div class="dist-icon">⚡</div>
+              <div class="dist-content">
+                <h4>{{ analysisData.dwell_time_analysis.summary.distribution.under_10s }}</h4>
+                <p>Menos de 10s</p>
+              </div>
+            </div>
+            <div class="dist-card medium-time">
+              <div class="dist-icon">⏱️</div>
+              <div class="dist-content">
+                <h4>{{ analysisData.dwell_time_analysis.summary.distribution['10_30s'] }}</h4>
+                <p>10-30 segundos</p>
+              </div>
+            </div>
+            <div class="dist-card long">
+              <div class="dist-icon">⏰</div>
+              <div class="dist-content">
+                <h4>{{ analysisData.dwell_time_analysis.summary.distribution['30_60s'] }}</h4>
+                <p>30-60 segundos</p>
+              </div>
+            </div>
+            <div class="dist-card very-long">
+              <div class="dist-icon">🕐</div>
+              <div class="dist-content">
+                <h4>{{ analysisData.dwell_time_analysis.summary.distribution.over_60s }}</h4>
+                <p>Más de 60s</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -217,6 +325,12 @@ export default {
       
       // Gráfico de línea temporal
       this.createTimelineChart()
+      
+      // Gráficos de tiempo de permanencia (si hay datos disponibles)
+      if (this.analysisData.dwell_time_analysis && this.analysisData.dwell_time_analysis.summary) {
+        this.createDwellDistributionChart()
+        this.createDwellByZoneChart()
+      }
     },
 
     createZoneChart() {
@@ -340,6 +454,179 @@ export default {
       }
     },
 
+    createDwellDistributionChart() {
+      const ctx = this.$refs.dwellDistributionChart
+      console.log('Dwell distribution chart context:', ctx)
+      
+      if (!ctx) {
+        console.error('Dwell distribution chart canvas not found')
+        return
+      }
+
+      const distribution = this.analysisData.dwell_time_analysis.summary.distribution
+      console.log('Dwell distribution data:', distribution)
+      
+      if (!distribution) {
+        console.error('No dwell distribution data available')
+        return
+      }
+      
+      const labels = ['< 10s', '10-30s', '30-60s', '> 60s']
+      const data = [
+        distribution.under_10s || 0,
+        distribution['10_30s'] || 0,
+        distribution['30_60s'] || 0,
+        distribution.over_60s || 0
+      ]
+      
+      console.log('Distribution labels:', labels)
+      console.log('Distribution data:', data)
+
+      try {
+        this.charts.dwellDistributionChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Número de visitas',
+              data: data,
+              backgroundColor: [
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(255, 206, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(153, 102, 255, 0.8)'
+              ],
+              borderColor: [
+                'rgba(255, 99, 132, 1)',
+                'rgba(255, 206, 86, 1)',
+                'rgba(75, 192, 192, 1)',
+                'rgba(153, 102, 255, 1)'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Número de visitas'
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Duración de permanencia'
+                }
+              }
+            }
+          }
+        })
+        console.log('Dwell distribution chart created successfully')
+      } catch (error) {
+        console.error('Error creating dwell distribution chart:', error)
+      }
+    },
+
+    createDwellByZoneChart() {
+      const ctx = this.$refs.dwellByZoneChart
+      console.log('Dwell by zone chart context:', ctx)
+      
+      if (!ctx) {
+        console.error('Dwell by zone chart canvas not found')
+        return
+      }
+
+      const zoneData = this.analysisData.dwell_time_analysis.by_zone
+      console.log('Dwell by zone data:', zoneData)
+      
+      if (!zoneData || Object.keys(zoneData).length === 0) {
+        console.error('No dwell by zone data available')
+        return
+      }
+      
+      const labels = []
+      const avgTimes = []
+      const visitCounts = []
+      
+      for (const [zoneName, data] of Object.entries(zoneData)) {
+        if (typeof data === 'object' && data.average_dwell_time) {
+          labels.push(this.formatZoneName(zoneName))
+          avgTimes.push(data.average_dwell_time)
+          visitCounts.push(data.total_visits)
+        }
+      }
+      
+      console.log('Dwell by zone labels:', labels)
+      console.log('Dwell by zone avg times:', avgTimes)
+
+      try {
+        this.charts.dwellByZoneChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Tiempo promedio (segundos)',
+              data: avgTimes,
+              backgroundColor: 'rgba(54, 162, 235, 0.8)',
+              borderColor: 'rgba(54, 162, 235, 1)',
+              borderWidth: 1,
+              yAxisID: 'y'
+            }, {
+              label: 'Número de visitas',
+              data: visitCounts,
+              backgroundColor: 'rgba(255, 99, 132, 0.8)',
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 1,
+              yAxisID: 'y1',
+              type: 'line'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                type: 'linear',
+                display: true,
+                position: 'left',
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Tiempo promedio (segundos)'
+                }
+              },
+              y1: {
+                type: 'linear',
+                display: true,
+                position: 'right',
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Número de visitas'
+                },
+                grid: {
+                  drawOnChartArea: false,
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Zonas'
+                }
+              }
+            }
+          }
+        })
+        console.log('Dwell by zone chart created successfully')
+      } catch (error) {
+        console.error('Error creating dwell by zone chart:', error)
+      }
+    },
+
     destroyCharts() {
       Object.values(this.charts).forEach(chart => {
         if (chart) chart.destroy()
@@ -458,9 +745,27 @@ export default {
 
 .summary-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 20px;
-  margin-bottom: 30px;
+  margin-bottom: 40px;
+}
+
+@media (min-width: 1200px) {
+  .summary-cards {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
 }
 
 .card {
@@ -496,9 +801,52 @@ export default {
 
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
   gap: 25px;
   margin-bottom: 30px;
+}
+
+.main-charts {
+  grid-template-columns: 1fr 1fr;
+}
+
+.dwell-charts {
+  grid-template-columns: 1fr 1fr;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+.chart-container.wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 1200px) {
+  .main-charts,
+  .dwell-charts {
+    grid-template-columns: 1fr;
+  }
+  
+  .info-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  
+  .chart-container.wide {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .chart-container.wide {
+    grid-column: span 1;
+  }
 }
 
 .chart-container {
@@ -506,6 +854,20 @@ export default {
   border-radius: 12px;
   padding: 25px;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.chart-container:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+}
+
+.chart-container.large {
+  min-height: 400px;
+}
+
+.chart-container.medium {
+  min-height: 350px;
 }
 
 .chart-container h3 {
@@ -517,6 +879,14 @@ export default {
 .chart-wrapper {
   height: 300px;
   position: relative;
+}
+
+.chart-container.large .chart-wrapper {
+  height: 320px;
+}
+
+.chart-container.medium .chart-wrapper {
+  height: 280px;
 }
 
 .flow-visualization {
@@ -580,11 +950,38 @@ export default {
   margin-top: 30px;
 }
 
+.summary-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+@media (max-width: 768px) {
+  .summary-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .info-section {
   background: white;
   border-radius: 12px;
   padding: 25px;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.info-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+}
+
+.activity-section {
+  border-left: 4px solid #007bff;
+}
+
+.dwell-section {
+  border-left: 4px solid #17a2b8;
 }
 
 .info-section h3 {
@@ -592,10 +989,194 @@ export default {
   color: #333;
 }
 
-.activity-summary p {
+.metric-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 15px 0;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.metric-item:last-child {
+  border-bottom: none;
+}
+
+.metric-label {
+  font-weight: 500;
+  color: #666;
+}
+
+.metric-value {
+  font-weight: 600;
+  color: #333;
+  font-size: 1.1em;
+}
+
+.distribution-overview {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  border-left: 4px solid #28a745;
+}
+
+.distribution-overview h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+}
+
+.distribution-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.dist-card {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  transition: transform 0.2s, background 0.2s;
+  border: 2px solid transparent;
+}
+
+.dist-card:hover {
+  transform: translateY(-3px);
+  background: #e9ecef;
+}
+
+.dist-card.short {
+  border-color: #dc3545;
+}
+
+.dist-card.medium-time {
+  border-color: #ffc107;
+}
+
+.dist-card.long {
+  border-color: #fd7e14;
+}
+
+.dist-card.very-long {
+  border-color: #6f42c1;
+}
+
+.dist-icon {
+  font-size: 2em;
+  margin-bottom: 10px;
+}
+
+.dist-content h4 {
+  margin: 0;
+  font-size: 1.8em;
+  color: #333;
+}
+
+.dist-content p {
+  margin: 5px 0 0 0;
+  color: #666;
+  font-size: 0.9em;
+}
+
+.dwell-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 15px;
+}
+
+.dwell-stat-item {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #17a2b8;
+}
+
+.dwell-stat-item h4 {
+  margin: 0 0 15px 0;
+  color: #333;
+}
+
+.dwell-details p {
+  margin: 8px 0;
+  color: #666;
+}
+
+@media (max-width: 1200px) {
+  .main-charts,
+  .dwell-charts {
+    grid-template-columns: 1fr;
+  }
+  
+  .info-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  
+  .chart-container.wide {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .chart-container.wide {
+    grid-column: span 1;
+  }
+  
+  .dwell-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dwell-stat-item {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #17a2b8;
+}
+
+.dwell-stat-item h4 {
+  margin: 0 0 15px 0;
+  color: #333;
+}
+
+.dwell-details p {
+  margin: 8px 0;
+  color: #666;
+}
+
+.dwell-summary {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  border-left: 4px solid #ffc107;
+}
+
+.dwell-summary p {
   margin: 10px 0;
   color: #666;
   font-size: 1.1em;
+}
+
+.distribution-summary {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #dee2e6;
+}
+
+.distribution-summary h4 {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 1.1em;
+}
+
+.distribution-summary p {
+  margin: 5px 0;
+  color: #666;
+  font-size: 1em;
 }
 
 .no-data {

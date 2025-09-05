@@ -29,7 +29,8 @@ class AnalyticsProcessor:
                 "summary": self._generate_summary(df),
                 "zone_analysis": self._analyze_zones(df),
                 "temporal_analysis": self._analyze_temporal_patterns(df),
-                "flow_analysis": self._analyze_flow_patterns(df)
+                "flow_analysis": self._analyze_flow_patterns(df),
+                "dwell_time_analysis": self._analyze_dwell_times(df)
             }
             
             return analysis
@@ -121,6 +122,143 @@ class AnalyticsProcessor:
             "total_transitions": sum(flow_data.values())
         }
     
+    def _analyze_dwell_times(self, df: pd.DataFrame) -> Dict:
+        """
+        Analiza tiempos de permanencia usando eventos entry/exit
+        """
+        dwell_data = {
+            "by_zone": {},
+            "by_person": {},
+            "summary": {}
+        }
+        
+        # Verificar si tenemos eventos de salida
+        has_exits = 'exit' in df['event'].values if 'event' in df.columns else False
+        
+        if not has_exits:
+            # Si no hay eventos de salida, usar método anterior
+            return self._analyze_dwell_times_fallback(df)
+        
+        # Procesar cada persona individualmente
+        for person_id in df['person_tracker_id'].unique():
+            person_data = df[df['person_tracker_id'] == person_id].sort_values('timestamp_seconds')
+            person_dwell_times = []
+            
+            # Agrupar por zona para esta persona
+            for zone_id in person_data['zone_id'].unique():
+                zone_events = person_data[person_data['zone_id'] == zone_id].sort_values('timestamp_seconds')
+                
+                # Buscar pares entry-exit
+                entry_times = zone_events[zone_events['event'] == 'entry']['timestamp_seconds'].tolist()
+                exit_times = zone_events[zone_events['event'] == 'exit']['timestamp_seconds'].tolist()
+                
+                # Calcular tiempos de permanencia para cada sesión en la zona
+                zone_dwell_times = []
+                for i, entry_time in enumerate(entry_times):
+                    # Buscar la salida correspondiente
+                    matching_exits = [exit_time for exit_time in exit_times if exit_time > entry_time]
+                    if matching_exits:
+                        exit_time = min(matching_exits)  # La salida más próxima
+                        dwell_time = exit_time - entry_time
+                        zone_dwell_times.append(dwell_time)
+                        person_dwell_times.append(dwell_time)
+                        
+                        # Remover esta salida para evitar reutilización
+                        exit_times.remove(exit_time)
+                
+                # Estadísticas por zona
+                if zone_dwell_times:
+                    zone_key = f"zone_{zone_id}"
+                    if zone_key not in dwell_data["by_zone"]:
+                        dwell_data["by_zone"][zone_key] = []
+                    dwell_data["by_zone"][zone_key].extend(zone_dwell_times)
+            
+            # Estadísticas por persona
+            if person_dwell_times:
+                dwell_data["by_person"][f"person_{person_id}"] = {
+                    "total_dwell_time": sum(person_dwell_times),
+                    "average_dwell_time": np.mean(person_dwell_times),
+                    "visits_count": len(person_dwell_times),
+                    "max_dwell_time": max(person_dwell_times),
+                    "min_dwell_time": min(person_dwell_times)
+                }
+        
+        # Calcular estadísticas de resumen por zona
+        for zone_key, times in dwell_data["by_zone"].items():
+            if times:
+                dwell_data["by_zone"][zone_key] = {
+                    "raw_times": times,
+                    "average_dwell_time": np.mean(times),
+                    "median_dwell_time": np.median(times),
+                    "total_visits": len(times),
+                    "max_dwell_time": max(times),
+                    "min_dwell_time": min(times),
+                    "std_dwell_time": np.std(times)
+                }
+        
+        # Estadísticas generales
+        all_dwell_times = []
+        for zone_data in dwell_data["by_zone"].values():
+            if isinstance(zone_data, dict) and "raw_times" in zone_data:
+                all_dwell_times.extend(zone_data["raw_times"])
+        
+        if all_dwell_times:
+            dwell_data["summary"] = {
+                "overall_average": np.mean(all_dwell_times),
+                "overall_median": np.median(all_dwell_times),
+                "total_measured_visits": len(all_dwell_times),
+                "longest_stay": max(all_dwell_times),
+                "shortest_stay": min(all_dwell_times),
+                "distribution": {
+                    "under_10s": len([t for t in all_dwell_times if t < 10]),
+                    "10_30s": len([t for t in all_dwell_times if 10 <= t < 30]),
+                    "30_60s": len([t for t in all_dwell_times if 30 <= t < 60]),
+                    "over_60s": len([t for t in all_dwell_times if t >= 60])
+                }
+            }
+        
+        return dwell_data
+    
+    def _analyze_dwell_times_fallback(self, df: pd.DataFrame) -> Dict:
+        """
+        Método de respaldo para calcular tiempo de permanencia sin eventos exit
+        """
+        dwell_data = {
+            "by_zone": {},
+            "by_person": {},
+            "summary": {},
+            "note": "Calculated using first-last detection method (less accurate)"
+        }
+        
+        # Usar el método anterior basado en primera-última detección
+        for person_id in df['person_tracker_id'].unique():
+            person_data = df[df['person_tracker_id'] == person_id]
+            
+            for zone_id in person_data['zone_id'].unique():
+                zone_person_data = person_data[person_data['zone_id'] == zone_id]
+                
+                if len(zone_person_data) > 1:
+                    dwell_time = zone_person_data['timestamp_seconds'].max() - zone_person_data['timestamp_seconds'].min()
+                    
+                    zone_key = f"zone_{zone_id}"
+                    if zone_key not in dwell_data["by_zone"]:
+                        dwell_data["by_zone"][zone_key] = []
+                    dwell_data["by_zone"][zone_key].append(dwell_time)
+        
+        # Calcular estadísticas
+        for zone_key, times in dwell_data["by_zone"].items():
+            if times:
+                dwell_data["by_zone"][zone_key] = {
+                    "raw_times": times,
+                    "average_dwell_time": np.mean(times),
+                    "median_dwell_time": np.median(times),
+                    "total_visits": len(times),
+                    "max_dwell_time": max(times),
+                    "min_dwell_time": min(times)
+                }
+        
+        return dwell_data
+    
     def generate_visualization_data(self, analysis: Dict) -> Dict:
         """
         Prepara datos optimizados para visualización
@@ -142,6 +280,20 @@ class AnalyticsProcessor:
                     }
                 },
                 "zone_comparison": {
+                    "type": "bar",
+                    "data": {
+                        "labels": [],
+                        "values": []
+                    }
+                },
+                "dwell_time_distribution": {
+                    "type": "bar",
+                    "data": {
+                        "labels": ["< 10s", "10-30s", "30-60s", "> 60s"],
+                        "values": []
+                    }
+                },
+                "average_dwell_by_zone": {
                     "type": "bar",
                     "data": {
                         "labels": [],
@@ -170,6 +322,34 @@ class AnalyticsProcessor:
         for timestamp, data in timeline.items():
             viz_data["charts"]["temporal_activity"]["data"]["x"].append(timestamp)
             viz_data["charts"]["temporal_activity"]["data"]["y"].append(data["detections_per_second"])
+        
+        # Preparar datos de tiempo de permanencia
+        if "dwell_time_analysis" in analysis and "summary" in analysis["dwell_time_analysis"]:
+            dwell_summary = analysis["dwell_time_analysis"]["summary"]
+            
+            # Distribución de tiempos
+            if "distribution" in dwell_summary:
+                dist = dwell_summary["distribution"]
+                viz_data["charts"]["dwell_time_distribution"]["data"]["values"] = [
+                    dist.get("under_10s", 0),
+                    dist.get("10_30s", 0),
+                    dist.get("30_60s", 0),
+                    dist.get("over_60s", 0)
+                ]
+            
+            # Tiempo promedio por zona
+            if "by_zone" in analysis["dwell_time_analysis"]:
+                for zone_key, zone_data in analysis["dwell_time_analysis"]["by_zone"].items():
+                    if isinstance(zone_data, dict) and "average_dwell_time" in zone_data:
+                        viz_data["charts"]["average_dwell_by_zone"]["data"]["labels"].append(zone_key)
+                        viz_data["charts"]["average_dwell_by_zone"]["data"]["values"].append(
+                            round(zone_data["average_dwell_time"], 2)
+                        )
+            
+            # Añadir métricas de tiempo de permanencia a las tarjetas de resumen
+            if "overall_average" in dwell_summary:
+                viz_data["summary_cards"]["avg_dwell_time"] = f"{dwell_summary['overall_average']:.1f}s"
+                viz_data["summary_cards"]["total_visits"] = dwell_summary.get("total_measured_visits", 0)
         
         return viz_data
 
