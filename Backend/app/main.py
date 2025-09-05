@@ -4,8 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import uuid
 import shutil
-from app.processing import process_video_task, task_status
-from app.analytics import analytics_processor
+import traceback
+from Backend.app.processing import process_video_task, task_status
+from Backend.app.analytics import analytics_processor
 
 app = FastAPI(title="People Tracking API", version="1.0.0")
 
@@ -19,8 +20,8 @@ app.add_middleware(
 )
 
 # Directorios para guardar archivos temporales y resultados
-UPLOAD_DIR = "uploads"
-OUTPUT_DIR = "outputs"
+UPLOAD_DIR = "Backend/uploads"
+OUTPUT_DIR = "Backend/outputs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

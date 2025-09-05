@@ -179,14 +179,22 @@ export default {
       this.error = null
 
       try {
+        console.log('Loading data for task:', this.selectedTaskId)
         const response = await axios.get(`http://127.0.0.1:8000/analytics/analyze/${this.selectedTaskId}`)
         this.analysisData = response.data
+        console.log('Analysis data loaded:', this.analysisData)
         
         // Esperar a que Vue actualice el DOM
         await this.$nextTick()
-        this.createCharts()
+        console.log('DOM updated, creating charts...')
+        
+        // Esperar un poco más para que los canvas estén disponibles
+        setTimeout(() => {
+          this.createCharts()
+        }, 100)
         
       } catch (error) {
+        console.error('Error loading analysis:', error)
         this.error = 'Error loading analysis: ' + error.message
         this.analysisData = null
       } finally {
@@ -197,8 +205,13 @@ export default {
     createCharts() {
       this.destroyCharts()
       
-      if (!this.analysisData) return
+      if (!this.analysisData) {
+        console.log('No analysis data available for charts')
+        return
+      }
 
+      console.log('Creating charts with data:', this.analysisData)
+      
       // Gráfico de distribución por zonas
       this.createZoneChart()
       
@@ -208,81 +221,123 @@ export default {
 
     createZoneChart() {
       const ctx = this.$refs.zoneChart
-      if (!ctx) return
+      console.log('Zone chart context:', ctx)
+      
+      if (!ctx) {
+        console.error('Zone chart canvas not found')
+        return
+      }
 
       const zoneData = this.analysisData.zone_analysis
+      console.log('Zone data:', zoneData)
+      
+      if (!zoneData || Object.keys(zoneData).length === 0) {
+        console.error('No zone data available')
+        return
+      }
+      
       const labels = Object.keys(zoneData).map(zone => this.formatZoneName(zone))
       const data = Object.values(zoneData).map(zone => zone.total_entries)
+      
+      console.log('Chart labels:', labels)
+      console.log('Chart data:', data)
 
-      this.charts.zoneChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: data,
-            backgroundColor: [
-              '#FF6384',
-              '#36A2EB', 
-              '#FFCE56',
-              '#4BC0C0'
-            ],
-            borderWidth: 2,
-            borderColor: '#ffffff'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'bottom'
+      try {
+        this.charts.zoneChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: data,
+              backgroundColor: [
+                '#FF6384',
+                '#36A2EB', 
+                '#FFCE56',
+                '#4BC0C0',
+                '#9966FF',
+                '#FF9966'
+              ],
+              borderWidth: 2,
+              borderColor: '#ffffff'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom'
+              }
             }
           }
-        }
-      })
+        })
+        console.log('Zone chart created successfully')
+      } catch (error) {
+        console.error('Error creating zone chart:', error)
+      }
     },
 
     createTimelineChart() {
       const ctx = this.$refs.timelineChart
-      if (!ctx) return
+      console.log('Timeline chart context:', ctx)
+      
+      if (!ctx) {
+        console.error('Timeline chart canvas not found')
+        return
+      }
 
       const timelineData = this.analysisData.temporal_analysis.timeline
+      console.log('Timeline data:', timelineData)
+      
+      if (!timelineData || Object.keys(timelineData).length === 0) {
+        console.error('No timeline data available')
+        return
+      }
+      
       const timestamps = Object.keys(timelineData).map(t => parseFloat(t))
       const detections = Object.values(timelineData).map(d => d.detections_per_second)
+      
+      console.log('Timeline timestamps:', timestamps.slice(0, 5))
+      console.log('Timeline detections:', detections.slice(0, 5))
 
-      this.charts.timelineChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: timestamps,
-          datasets: [{
-            label: 'Detecciones por segundo',
-            data: detections,
-            borderColor: '#36A2EB',
-            backgroundColor: 'rgba(54, 162, 235, 0.1)',
-            fill: true,
-            tension: 0.4
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: {
-              title: {
-                display: true,
-                text: 'Tiempo (segundos)'
-              }
-            },
-            y: {
-              title: {
-                display: true,
-                text: 'Detecciones'
+      try {
+        this.charts.timelineChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: timestamps,
+            datasets: [{
+              label: 'Detecciones por segundo',
+              data: detections,
+              borderColor: '#36A2EB',
+              backgroundColor: 'rgba(54, 162, 235, 0.1)',
+              fill: true,
+              tension: 0.4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: 'Tiempo (segundos)'
+                }
               },
-              beginAtZero: true
+              y: {
+                title: {
+                  display: true,
+                  text: 'Detecciones'
+                },
+                beginAtZero: true
+              }
             }
           }
-        }
-      })
+        })
+        console.log('Timeline chart created successfully')
+      } catch (error) {
+        console.error('Error creating timeline chart:', error)
+      }
     },
 
     destroyCharts() {
