@@ -31,7 +31,40 @@ Este proyecto implementa un sistema completo de análisis de video para detectar
 - ✅ Interfaz web intuitiva
 - ✅ API REST documentada
 
-## 📦 Instalación
+## � Inicio Rápido
+
+### 🪟 **Windows**
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/PulentoJose-edu/people-tracking-system.git
+cd people-tracking-system
+
+# 2. Ejecutar instalación automática
+setup.bat
+
+# 3. Iniciar la aplicación
+start.bat
+```
+
+### 🐧 **Linux / 🍎 macOS**
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/PulentoJose-edu/people-tracking-system.git
+cd people-tracking-system
+
+# 2. Ejecutar instalación automática
+./setup.sh
+
+# 3. Iniciar la aplicación
+./start.sh
+```
+
+### 🌐 **Acceso a la aplicación**
+- **Frontend (Interfaz)**: http://localhost:5173
+- **Backend (API)**: http://127.0.0.1:8000
+- **Documentación**: http://127.0.0.1:8000/docs
+
+## �📦 Instalación Manual
 
 ### Prerrequisitos
 
