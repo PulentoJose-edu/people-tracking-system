@@ -48,6 +48,17 @@ ipython_config.py
 # Environments
 .env
 .venv
+
+# Application specific
+Backend/uploads/*
+!Backend/uploads/.gitkeep
+Backend/outputs/*
+!Backend/outputs/.gitkeep
+*.mp4
+*.avi
+*.mov
+*.csv
+yolov8*.pt
 env/
 venv/
 ENV/

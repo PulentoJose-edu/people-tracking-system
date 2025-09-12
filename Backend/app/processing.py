@@ -57,6 +57,9 @@ def process_video_task(
         data_list = []
         entered_ids_per_zone = {i: set() for i in range(len(zones))}
         total_counts_per_zone = {i: 0 for i in range(len(zones))}
+        # Rastrear personas actualmente en cada zona para detectar salidas
+        current_ids_per_zone = {i: set() for i in range(len(zones))}
+        previous_ids_per_zone = {i: set() for i in range(len(zones))}
         frame_count = 0
 
         while cap.isOpened():
@@ -73,19 +76,40 @@ def process_video_task(
             if results.boxes.id is not None:
                 detections.tracker_id = results.boxes.id.cpu().numpy().astype(int)
 
+                # Guardar el estado anterior
+                previous_ids_per_zone = {i: current_ids_per_zone[i].copy() for i in range(len(zones))}
+                # Resetear el estado actual
+                current_ids_per_zone = {i: set() for i in range(len(zones))}
+
+                # Detectar personas actualmente en cada zona
                 for i, zone in enumerate(zones):
                     mask = zone.trigger(detections=detections)
                     detections_in_zone = detections[mask]
 
                     for tracker_id in detections_in_zone.tracker_id:
-                        if tracker_id not in entered_ids_per_zone[i]:
-                            entered_ids_per_zone[i].add(tracker_id)
-                            total_counts_per_zone[i] += 1
+                        current_ids_per_zone[i].add(tracker_id)
+                        
+                        # Detectar ENTRADA: persona no estaba en zona anterior pero sí está ahora
+                        if tracker_id not in previous_ids_per_zone[i]:
+                            if tracker_id not in entered_ids_per_zone[i]:
+                                entered_ids_per_zone[i].add(tracker_id)
+                                total_counts_per_zone[i] += 1
+                            
                             data_list.append({
                                 'timestamp_seconds': timestamp, 'frame': frame_count,
                                 'zone_id': i, 'person_tracker_id': tracker_id,
                                 'event': 'entry'
                             })
+
+                # Detectar SALIDAS: personas que estaban en zona anterior pero ya no están
+                for i in range(len(zones)):
+                    exited_ids = previous_ids_per_zone[i] - current_ids_per_zone[i]
+                    for tracker_id in exited_ids:
+                        data_list.append({
+                            'timestamp_seconds': timestamp, 'frame': frame_count,
+                            'zone_id': i, 'person_tracker_id': tracker_id,
+                            'event': 'exit'
+                        })
 
             # Anotación del frame
             labels = [f"ID {tracker_id}" for tracker_id in detections.tracker_id] if detections.tracker_id is not None else []
