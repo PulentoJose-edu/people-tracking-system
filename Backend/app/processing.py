@@ -54,7 +54,7 @@ def process_video_task(
             np.array([[width // 2, height // 2], [width, height // 2], [width, height], [width // 2, height]], np.int32)
         ]
 
-        zones = [sv.PolygonZone(p, frame_resolution_wh=(width, height)) for p in POLYGONS]
+        zones = [sv.PolygonZone(p) for p in POLYGONS]
         bounding_box_annotator = sv.BoundingBoxAnnotator(thickness=2)
         label_annotator = sv.LabelAnnotator(text_thickness=1, text_scale=0.5)
 
