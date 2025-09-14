@@ -5,6 +5,10 @@ import supervision as sv
 import numpy as np
 import time
 import os
+import warnings
+
+# Configurar para mostrar advertencias de deprecación solo una vez
+warnings.filterwarnings("once", category=DeprecationWarning)
 
 # Diccionario en memoria para rastrear el estado de las tareas.
 # En una app de producción, usarías una base de datos o Redis.
@@ -51,7 +55,8 @@ def process_video_task(
         ]
 
         zones = [sv.PolygonZone(p, frame_resolution_wh=(width, height)) for p in POLYGONS]
-        box_annotator = sv.BoxAnnotator(thickness=2, text_thickness=1, text_scale=0.5)
+        bounding_box_annotator = sv.BoundingBoxAnnotator(thickness=2)
+        label_annotator = sv.LabelAnnotator(text_thickness=1, text_scale=0.5)
 
         # 3. Procesamiento
         data_list = []
@@ -113,7 +118,8 @@ def process_video_task(
 
             # Anotación del frame
             labels = [f"ID {tracker_id}" for tracker_id in detections.tracker_id] if detections.tracker_id is not None else []
-            annotated_frame = box_annotator.annotate(scene=frame.copy(), detections=detections, labels=labels)
+            annotated_frame = bounding_box_annotator.annotate(scene=frame.copy(), detections=detections)
+            annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
             for i, zone in enumerate(zones):
                 polygon = zone.polygon.astype(int)
                 count = total_counts_per_zone[i]
