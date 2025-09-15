@@ -14,6 +14,11 @@ warnings.filterwarnings("once", category=DeprecationWarning)
 # En una app de producción, usarías una base de datos o Redis.
 task_status = {}
 
+# MEJORAS DE TRACKING IMPLEMENTADAS:
+# 1. YOLOv8s en lugar de YOLOv8n: Mejor precisión en detección
+# 2. BotSORT en lugar de ByteTrack: Mejor manejo de oclusiones y cruces
+# 3. Parámetros optimizados: conf=0.3, iou=0.5, max_det=50
+
 def process_video_task(
     task_id: str,
     video_path: str,
@@ -25,8 +30,8 @@ def process_video_task(
     Actualiza el estado de la tarea en el diccionario global.
     """
     try:
-        # 1. Cargar modelo y video
-        model = YOLO('yolov8n.pt')
+        # 1. Cargar modelo y video - Usar modelo más preciso para mejor tracking
+        model = YOLO('yolov8s.pt')  # Small model - mejor balance precisión/velocidad que nano
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise IOError(f"No se pudo abrir el video {video_path}")
@@ -75,7 +80,17 @@ def process_video_task(
             frame_count += 1
             timestamp = frame_count / fps
 
-            results = model.track(frame, persist=True, classes=[0], verbose=False, tracker="bytetrack.yaml")[0]
+            # Usar BotSORT con parámetros optimizados para mejor tracking en cruces
+            results = model.track(
+                frame, 
+                persist=True, 
+                classes=[0],  # Solo personas
+                verbose=False, 
+                tracker="botsort.yaml",  # Mejor tracker para oclusiones y cruces
+                conf=0.3,     # Umbral de confianza más bajo para detectar personas parcialmente ocultas
+                iou=0.5,      # Intersection over Union threshold
+                max_det=50    # Máximo de detecciones por frame
+            )[0]
             detections = sv.Detections.from_ultralytics(results)
 
             if results.boxes.id is not None:
