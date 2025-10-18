@@ -27,21 +27,40 @@ task_status = {}
 
 # Importar modelo PAR (lazy loading)
 _par_model = None
+_use_ntqai = True  # Flag para usar modelos NTQAI (True) o baseline PAR (False)
 
 def get_par_model():
     """Lazy loading del modelo PAR para no ralentizar el inicio"""
-    global _par_model
+    global _par_model, _use_ntqai
     if _par_model is None:
         try:
-            from models.attribute_recognition import get_par_model as _get_par
-            model_path = Path(__file__).parent.parent / 'models' / 'resnet50_peta.pth'
-            _par_model = _get_par(
-                model_path=str(model_path) if model_path.exists() else None,
-                device='cpu'  # Usar 'cuda' si tienes GPU disponible
-            )
-            print("✅ Modelo PAR cargado exitosamente")
+            if _use_ntqai:
+                # Intentar cargar modelos NTQAI (precisión ~95% género, ~88% edad)
+                print("🔄 Cargando modelos NTQAI especializados...")
+                from models.ntqai_adapter import create_ntqai_model
+                _par_model = create_ntqai_model()
+                if _par_model:
+                    print("✅ Modelos NTQAI cargados exitosamente")
+                    print("   - Género: ~95% precisión")
+                    print("   - Edad: ~88% precisión")
+                else:
+                    print("⚠️  No se pudieron cargar modelos NTQAI, usando baseline...")
+                    _use_ntqai = False
+            
+            if not _use_ntqai or _par_model is None:
+                # Fallback: usar modelo PAR baseline
+                print("🔄 Cargando modelo PAR baseline...")
+                from models.attribute_recognition import get_par_model as _get_par
+                model_path = Path(__file__).parent.parent / 'models' / 'resnet50_peta.pth'
+                _par_model = _get_par(
+                    model_path=str(model_path) if model_path.exists() else None,
+                    device='cpu'  # Usar 'cuda' si tienes GPU disponible
+                )
+                print("✅ Modelo PAR baseline cargado")
         except Exception as e:
             print(f"⚠️  No se pudo cargar modelo PAR: {e}")
+            import traceback
+            traceback.print_exc()
             _par_model = None
     return _par_model
 
@@ -150,15 +169,42 @@ def process_video_task(
                     track_ids = detections.tracker_id.tolist()
                     
                     try:
-                        # Predicción en batch para todas las personas detectadas
-                        par_results = par_model.predict_batch(frame, bboxes, track_ids)
-                        
-                        # Guardar en caché
-                        for track_id, par_result in zip(track_ids, par_results):
-                            if par_result['gender'] != 'Desconocido':
-                                demographic_cache[track_id] = par_result
+                        if _use_ntqai:
+                            # Usar modelos NTQAI (procesamiento individual por persona)
+                            from PIL import Image
+                            for bbox, track_id in zip(bboxes, track_ids):
+                                x1, y1, x2, y2 = map(int, bbox)
+                                # Extraer crop de la persona
+                                person_crop = frame[y1:y2, x1:x2]
+                                
+                                if person_crop.size > 0:
+                                    # Convertir BGR a RGB
+                                    person_rgb = cv2.cvtColor(person_crop, cv2.COLOR_BGR2RGB)
+                                    pil_image = Image.fromarray(person_rgb)
+                                    
+                                    # Predicción con NTQAI
+                                    result = par_model.predict(pil_image)
+                                    
+                                    # Mapear a formato compatible
+                                    demographic_cache[track_id] = {
+                                        'gender': result['gender'],  # 'M' o 'F'
+                                        'gender_confidence': result['gender_conf'],
+                                        'age': result['age_group'],  # '0-18', '19-35', etc.
+                                        'age_confidence': result['age_conf']
+                                    }
+                        else:
+                            # Usar modelo PAR baseline (procesamiento batch)
+                            par_results = par_model.predict_batch(frame, bboxes, track_ids)
+                            
+                            # Guardar en caché
+                            for track_id, par_result in zip(track_ids, par_results):
+                                if par_result['gender'] != 'Desconocido':
+                                    demographic_cache[track_id] = par_result
+                                    
                     except Exception as e:
                         print(f"⚠️  Error en análisis PAR (frame {frame_count}): {e}")
+                        import traceback
+                        traceback.print_exc()
 
                 # Guardar el estado anterior
                 previous_ids_per_zone = {i: current_ids_per_zone[i].copy() for i in range(len(zones))}
@@ -221,18 +267,33 @@ def process_video_task(
                     
                     # Crear etiqueta con ID, género y edad
                     if demo_attrs:
-                        gender_short = demo_attrs.get('gender', 'N/A')[0]  # M o F
+                        gender_short = demo_attrs.get('gender', 'N/A')
+                        # Si es de una letra (M/F), usar directamente
+                        if len(gender_short) == 1:
+                            gender_display = gender_short
+                        else:
+                            gender_display = gender_short[0]  # Tomar primera letra
+                        
                         age_short = demo_attrs.get('age', 'N/A')
-                        # Abreviar edad
+                        
+                        # Abreviar edad - compatible con ambos formatos
                         age_abbr = {
+                            # Formato baseline PAR
                             'Niño': 'Niño',
                             'Adolescente': 'Adol',
                             'Adulto Joven': 'A.Jov',
                             'Adulto': 'Adult',
                             'Mayor': 'Mayor',
-                            'Desconocido': '?'
-                        }.get(age_short, '?')
-                        labels.append(f"ID{tracker_id} {gender_short}/{age_abbr}")
+                            'Desconocido': '?',
+                            'Unknown': '?',
+                            # Formato NTQAI (rangos)
+                            '0-18': '<18',
+                            '19-35': '19-35',
+                            '36-60': '36-60',
+                            '60+': '60+'
+                        }.get(age_short, age_short if len(age_short) <= 6 else '?')
+                        
+                        labels.append(f"ID{tracker_id} {gender_display}/{age_abbr}")
                     else:
                         labels.append(f"ID {tracker_id}")
             else:
