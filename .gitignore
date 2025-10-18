@@ -160,6 +160,11 @@ yolov8*.pt
 yolov5*.pt
 best.pt
 last.pt
+*.pth
+*.bin  # Modelos NTQAI y similares
+*.onnx
+*.engine
+*.weights
 
 # Test files
 test_*.py

@@ -1,8 +1,8 @@
 fastapi
 uvicorn[standard]
 python-multipart
-torch==2.0.1
-torchvision==0.15.2
+torch>=2.1.0
+torchvision
 ultralytics
 supervision==0.20.0
 opencv-python-headless==4.10.0.84
@@ -12,3 +12,4 @@ lap
 # Dependencias adicionales para PAR (Pedestrian Attribute Recognition)
 timm>=0.9.0  # PyTorch Image Models - para arquitecturas avanzadas
 Pillow>=9.0.0  # Procesamiento de imágenes
+transformers>=4.50.0  # Hugging Face Transformers - para modelos BEiT (NTQAI)
