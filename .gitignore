@@ -169,3 +169,5 @@ last.pt
 # Test files
 test_*.py
 *_test.py
+Backend/models/ntqai_age.bin
+Backend/models/ntqai_gender.bin
