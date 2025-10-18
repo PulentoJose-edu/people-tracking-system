@@ -6,6 +6,11 @@ import numpy as np
 import time
 import os
 import warnings
+import sys
+from pathlib import Path
+
+# Agregar path para imports de modelos
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Configurar para mostrar advertencias de deprecación solo una vez
 warnings.filterwarnings("once", category=DeprecationWarning)
@@ -18,20 +23,59 @@ task_status = {}
 # 1. YOLOv8s en lugar de YOLOv8n: Mejor precisión en detección
 # 2. BotSORT en lugar de ByteTrack: Mejor manejo de oclusiones y cruces
 # 3. Parámetros optimizados: conf=0.3, iou=0.5, max_det=50
+# 4. PAR (Pedestrian Attribute Recognition): Detección de género y edad
+
+# Importar modelo PAR (lazy loading)
+_par_model = None
+
+def get_par_model():
+    """Lazy loading del modelo PAR para no ralentizar el inicio"""
+    global _par_model
+    if _par_model is None:
+        try:
+            from models.attribute_recognition import get_par_model as _get_par
+            model_path = Path(__file__).parent.parent / 'models' / 'resnet50_peta.pth'
+            _par_model = _get_par(
+                model_path=str(model_path) if model_path.exists() else None,
+                device='cpu'  # Usar 'cuda' si tienes GPU disponible
+            )
+            print("✅ Modelo PAR cargado exitosamente")
+        except Exception as e:
+            print(f"⚠️  No se pudo cargar modelo PAR: {e}")
+            _par_model = None
+    return _par_model
 
 def process_video_task(
     task_id: str,
     video_path: str,
     output_video_path: str,
     output_csv_path: str,
+    enable_par: bool = True,  # Nuevo parámetro para habilitar/deshabilitar PAR
+    par_interval: int = 15,   # Analizar PAR cada N frames
 ):
     """
     Función que procesa el video en segundo plano.
     Actualiza el estado de la tarea en el diccionario global.
+    
+    Args:
+        task_id: ID único de la tarea
+        video_path: Ruta al video de entrada
+        output_video_path: Ruta para guardar video procesado
+        output_csv_path: Ruta para guardar datos CSV
+        enable_par: Habilitar análisis de género y edad (default: True)
+        par_interval: Analizar atributos cada N frames (default: 15)
     """
     try:
-        # 1. Cargar modelo y video - Usar modelo más preciso para mejor tracking
+        # 1. Cargar modelo YOLO
         model = YOLO('yolov8s.pt')  # Small model - mejor balance precisión/velocidad que nano
+        
+        # 1b. Cargar modelo PAR si está habilitado
+        par_model = None
+        if enable_par:
+            par_model = get_par_model()
+            if par_model:
+                print(f"🎯 PAR habilitado - Análisis cada {par_interval} frames")
+        
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise IOError(f"No se pudo abrir el video {video_path}")
@@ -71,6 +115,9 @@ def process_video_task(
         current_ids_per_zone = {i: set() for i in range(len(zones))}
         previous_ids_per_zone = {i: set() for i in range(len(zones))}
         frame_count = 0
+        
+        # Caché de atributos demográficos por track_id
+        demographic_cache = {}
 
         while cap.isOpened():
             ret, frame = cap.read()
@@ -96,6 +143,23 @@ def process_video_task(
             if results.boxes.id is not None:
                 detections.tracker_id = results.boxes.id.cpu().numpy().astype(int)
 
+                # Análisis PAR (Pedestrian Attribute Recognition) cada N frames
+                if par_model and frame_count % par_interval == 0:
+                    # Batch processing de atributos demográficos
+                    bboxes = detections.xyxy.tolist()  # Lista de [x1, y1, x2, y2]
+                    track_ids = detections.tracker_id.tolist()
+                    
+                    try:
+                        # Predicción en batch para todas las personas detectadas
+                        par_results = par_model.predict_batch(frame, bboxes, track_ids)
+                        
+                        # Guardar en caché
+                        for track_id, par_result in zip(track_ids, par_results):
+                            if par_result['gender'] != 'Desconocido':
+                                demographic_cache[track_id] = par_result
+                    except Exception as e:
+                        print(f"⚠️  Error en análisis PAR (frame {frame_count}): {e}")
+
                 # Guardar el estado anterior
                 previous_ids_per_zone = {i: current_ids_per_zone[i].copy() for i in range(len(zones))}
                 # Resetear el estado actual
@@ -115,24 +179,65 @@ def process_video_task(
                                 entered_ids_per_zone[i].add(tracker_id)
                                 total_counts_per_zone[i] += 1
                             
+                            # Obtener atributos demográficos del caché
+                            demo_attrs = demographic_cache.get(tracker_id, {})
+                            
                             data_list.append({
-                                'timestamp_seconds': timestamp, 'frame': frame_count,
-                                'zone_id': i, 'person_tracker_id': tracker_id,
-                                'event': 'entry'
+                                'timestamp_seconds': timestamp, 
+                                'frame': frame_count,
+                                'zone_id': i, 
+                                'person_tracker_id': tracker_id,
+                                'event': 'entry',
+                                'gender': demo_attrs.get('gender', 'Desconocido'),
+                                'gender_confidence': demo_attrs.get('gender_confidence', 0.0),
+                                'age': demo_attrs.get('age', 'Desconocido'),
+                                'age_confidence': demo_attrs.get('age_confidence', 0.0)
                             })
 
                 # Detectar SALIDAS: personas que estaban en zona anterior pero ya no están
                 for i in range(len(zones)):
                     exited_ids = previous_ids_per_zone[i] - current_ids_per_zone[i]
                     for tracker_id in exited_ids:
+                        # Obtener atributos demográficos del caché
+                        demo_attrs = demographic_cache.get(tracker_id, {})
+                        
                         data_list.append({
-                            'timestamp_seconds': timestamp, 'frame': frame_count,
-                            'zone_id': i, 'person_tracker_id': tracker_id,
-                            'event': 'exit'
+                            'timestamp_seconds': timestamp, 
+                            'frame': frame_count,
+                            'zone_id': i, 
+                            'person_tracker_id': tracker_id,
+                            'event': 'exit',
+                            'gender': demo_attrs.get('gender', 'Desconocido'),
+                            'gender_confidence': demo_attrs.get('gender_confidence', 0.0),
+                            'age': demo_attrs.get('age', 'Desconocido'),
+                            'age_confidence': demo_attrs.get('age_confidence', 0.0)
                         })
 
-            # Anotación del frame
-            labels = [f"ID {tracker_id}" for tracker_id in detections.tracker_id] if detections.tracker_id is not None else []
+            # Anotación del frame con atributos demográficos
+            if detections.tracker_id is not None:
+                labels = []
+                for tracker_id in detections.tracker_id:
+                    demo_attrs = demographic_cache.get(tracker_id, {})
+                    
+                    # Crear etiqueta con ID, género y edad
+                    if demo_attrs:
+                        gender_short = demo_attrs.get('gender', 'N/A')[0]  # M o F
+                        age_short = demo_attrs.get('age', 'N/A')
+                        # Abreviar edad
+                        age_abbr = {
+                            'Niño': 'Niño',
+                            'Adolescente': 'Adol',
+                            'Adulto Joven': 'A.Jov',
+                            'Adulto': 'Adult',
+                            'Mayor': 'Mayor',
+                            'Desconocido': '?'
+                        }.get(age_short, '?')
+                        labels.append(f"ID{tracker_id} {gender_short}/{age_abbr}")
+                    else:
+                        labels.append(f"ID {tracker_id}")
+            else:
+                labels = []
+            
             annotated_frame = bounding_box_annotator.annotate(scene=frame.copy(), detections=detections)
             annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
             for i, zone in enumerate(zones):

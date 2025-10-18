@@ -30,7 +30,8 @@ class AnalyticsProcessor:
                 "zone_analysis": self._analyze_zones(df),
                 "temporal_analysis": self._analyze_temporal_patterns(df),
                 "flow_analysis": self._analyze_flow_patterns(df),
-                "dwell_time_analysis": self._analyze_dwell_times(df)
+                "dwell_time_analysis": self._analyze_dwell_times(df),
+                "demographic_analysis": self._analyze_demographics(df)  # Nuevo análisis demográfico
             }
             
             return analysis
@@ -352,6 +353,112 @@ class AnalyticsProcessor:
                 viz_data["summary_cards"]["total_visits"] = dwell_summary.get("total_measured_visits", 0)
         
         return viz_data
+    
+    def _analyze_demographics(self, df: pd.DataFrame) -> Dict:
+        """
+        Analiza atributos demográficos (género y edad) de las personas detectadas
+        """
+        demographic_data = {
+            "gender_distribution": {},
+            "age_distribution": {},
+            "gender_by_zone": {},
+            "age_by_zone": {},
+            "summary": {},
+            "has_data": False
+        }
+        
+        # Verificar si existen columnas demográficas
+        if 'gender' not in df.columns or 'age' not in df.columns:
+            demographic_data["note"] = "No demographic data available in this analysis"
+            return demographic_data
+        
+        # Filtrar solo personas con datos demográficos válidos (no Desconocido)
+        df_valid = df[
+            (df['gender'] != 'Desconocido') & 
+            (df['age'] != 'Desconocido')
+        ].copy()
+        
+        if df_valid.empty:
+            demographic_data["note"] = "No valid demographic data found"
+            return demographic_data
+        
+        demographic_data["has_data"] = True
+        
+        # 1. Distribución por género (usando solo una entrada por persona)
+        df_unique_persons = df_valid.drop_duplicates(subset=['person_tracker_id'])
+        
+        gender_counts = df_unique_persons['gender'].value_counts().to_dict()
+        total_persons = len(df_unique_persons)
+        
+        demographic_data["gender_distribution"] = {
+            "counts": gender_counts,
+            "percentages": {
+                gender: round((count / total_persons) * 100, 2) 
+                for gender, count in gender_counts.items()
+            },
+            "total_classified": total_persons
+        }
+        
+        # 2. Distribución por edad
+        age_counts = df_unique_persons['age'].value_counts().to_dict()
+        
+        demographic_data["age_distribution"] = {
+            "counts": age_counts,
+            "percentages": {
+                age: round((count / total_persons) * 100, 2) 
+                for age, count in age_counts.items()
+            },
+            "total_classified": total_persons
+        }
+        
+        # 3. Distribución por zona
+        for zone_id in df_valid['zone_id'].unique():
+            zone_data = df_valid[df_valid['zone_id'] == zone_id]
+            zone_unique = zone_data.drop_duplicates(subset=['person_tracker_id'])
+            
+            zone_key = f"zone_{zone_id}"
+            
+            # Género por zona
+            zone_gender = zone_unique['gender'].value_counts().to_dict()
+            zone_total = len(zone_unique)
+            
+            demographic_data["gender_by_zone"][zone_key] = {
+                "counts": zone_gender,
+                "percentages": {
+                    gender: round((count / zone_total) * 100, 2) 
+                    for gender, count in zone_gender.items()
+                },
+                "total": zone_total
+            }
+            
+            # Edad por zona
+            zone_age = zone_unique['age'].value_counts().to_dict()
+            
+            demographic_data["age_by_zone"][zone_key] = {
+                "counts": zone_age,
+                "percentages": {
+                    age: round((count / zone_total) * 100, 2) 
+                    for age, count in zone_age.items()
+                },
+                "total": zone_total
+            }
+        
+        # 4. Resumen con estadísticas clave
+        # Calcular confianza promedio
+        avg_gender_conf = df_valid['gender_confidence'].mean() if 'gender_confidence' in df_valid.columns else 0
+        avg_age_conf = df_valid['age_confidence'].mean() if 'age_confidence' in df_valid.columns else 0
+        
+        demographic_data["summary"] = {
+            "total_persons_classified": total_persons,
+            "total_detections_with_demographics": len(df_valid),
+            "classification_rate": round((total_persons / df['person_tracker_id'].nunique()) * 100, 2),
+            "average_gender_confidence": round(avg_gender_conf, 3),
+            "average_age_confidence": round(avg_age_conf, 3),
+            "most_common_gender": max(gender_counts, key=gender_counts.get) if gender_counts else "N/A",
+            "most_common_age": max(age_counts, key=age_counts.get) if age_counts else "N/A"
+        }
+        
+        return demographic_data
 
 # Instancia global del procesador
 analytics_processor = AnalyticsProcessor()
