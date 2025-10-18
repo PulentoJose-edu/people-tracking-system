@@ -51,7 +51,7 @@ def process_video_task(
     output_video_path: str,
     output_csv_path: str,
     enable_par: bool = True,  # Nuevo parámetro para habilitar/deshabilitar PAR
-    par_interval: int = 15,   # Analizar PAR cada N frames
+    par_interval: int = 10,   # Analizar PAR cada N frames (reducido de 15 a 10 para más análisis)
 ):
     """
     Función que procesa el video en segundo plano.

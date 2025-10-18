@@ -26,6 +26,10 @@ class PARModel:
     GENDER_LABELS = ['Masculino', 'Femenino']
     AGE_LABELS = ['Niño', 'Adolescente', 'Adulto Joven', 'Adulto', 'Mayor']
     
+    # Umbrales de confianza mínima
+    MIN_GENDER_CONFIDENCE = 0.6  # Solo aceptar predicciones de género con confianza > 60%
+    MIN_AGE_CONFIDENCE = 0.5     # Solo aceptar predicciones de edad con confianza > 50%
+    
     def __init__(self, model_path: Optional[str] = None, device: str = 'cpu'):
         """
         Inicializa el modelo PAR
@@ -49,17 +53,18 @@ class PARModel:
         self.model.to(self.device)
         self.model.eval()
         
-        # Transformaciones de imagen (estándar PETA)
+        # Transformaciones de imagen (estándar PETA) - Aumentada para mejor detalle
         self.transform = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize((256, 128)),  # Altura x Ancho estándar PAR
+            transforms.Resize((320, 160)),  # Aumentado de 256x128 para más detalles
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                                std=[0.229, 0.224, 0.225])
         ])
         
-        # Caché de resultados por track_id
+        # Caché de resultados por track_id con historial para votación
         self.cache = {}
+        self.prediction_history = {}  # Historial de predicciones para votación mayoritaria
         
     def _build_model(self) -> nn.Module:
         """
@@ -190,10 +195,14 @@ class PARModel:
             age_idx = age_probs.argmax().item()
             age_conf = age_probs[age_idx].item()
             
+            # Aplicar filtro de confianza - si la confianza es baja, marcar como desconocido
+            gender_label = self.GENDER_LABELS[gender_idx] if gender_conf >= self.MIN_GENDER_CONFIDENCE else 'Desconocido'
+            age_label = self.AGE_LABELS[age_idx] if age_conf >= self.MIN_AGE_CONFIDENCE else 'Desconocido'
+            
             result = {
-                'gender': self.GENDER_LABELS[gender_idx],
+                'gender': gender_label,
                 'gender_confidence': round(gender_conf, 3),
-                'age': self.AGE_LABELS[age_idx],
+                'age': age_label,
                 'age_confidence': round(age_conf, 3),
                 'gender_probs': {label: round(prob.item(), 3) 
                                 for label, prob in zip(self.GENDER_LABELS, gender_probs)},
@@ -201,7 +210,36 @@ class PARModel:
                              for label, prob in zip(self.AGE_LABELS, age_probs)}
             }
             
-            # Guardar en caché
+            # Sistema de votación mayoritaria
+            if track_id is not None:
+                # Inicializar historial si no existe
+                if track_id not in self.prediction_history:
+                    self.prediction_history[track_id] = {
+                        'gender_votes': [],
+                        'age_votes': []
+                    }
+                
+                # Agregar predicción al historial (solo si confianza es suficiente)
+                if gender_conf >= self.MIN_GENDER_CONFIDENCE:
+                    self.prediction_history[track_id]['gender_votes'].append(gender_label)
+                if age_conf >= self.MIN_AGE_CONFIDENCE:
+                    self.prediction_history[track_id]['age_votes'].append(age_label)
+                
+                # Usar votación mayoritaria si hay suficientes muestras
+                history = self.prediction_history[track_id]
+                if len(history['gender_votes']) >= 3:
+                    # Obtener el género más común
+                    from collections import Counter
+                    most_common_gender = Counter(history['gender_votes']).most_common(1)[0][0]
+                    result['gender'] = most_common_gender
+                
+                if len(history['age_votes']) >= 3:
+                    # Obtener la edad más común
+                    from collections import Counter
+                    most_common_age = Counter(history['age_votes']).most_common(1)[0][0]
+                    result['age'] = most_common_age
+            
+            # Guardar en caché (resultado con votación)
             if track_id is not None:
                 self.cache[track_id] = result
             
@@ -305,12 +343,27 @@ class PARModel:
         }
     
     def clear_cache(self):
-        """Limpia el caché de predicciones"""
+        """Limpia el caché de predicciones y el historial de votación"""
         self.cache.clear()
+        self.prediction_history.clear()
     
     def get_cache_size(self) -> int:
         """Retorna el tamaño del caché"""
         return len(self.cache)
+    
+    def get_history_stats(self) -> Dict:
+        """Retorna estadísticas del historial de votación"""
+        stats = {
+            'total_tracked_persons': len(self.prediction_history),
+            'persons_with_votes': {
+                track_id: {
+                    'gender_votes': len(hist['gender_votes']),
+                    'age_votes': len(hist['age_votes'])
+                }
+                for track_id, hist in self.prediction_history.items()
+            }
+        }
+        return stats
 
 
 # Función helper para crear instancia global (singleton pattern)
