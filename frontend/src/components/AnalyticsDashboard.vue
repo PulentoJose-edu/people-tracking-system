@@ -62,6 +62,20 @@
             <p>Visitas Medidas</p>
           </div>
         </div>
+        <div v-if="analysisData.demographic_analysis && analysisData.demographic_analysis.has_data" class="card demographic wide-card">
+          <div class="card-icon">👤</div>
+          <div class="card-content">
+            <h3>{{ analysisData.demographic_analysis.summary.most_common_gender === 'M' ? '♂️' : '♀️' }}</h3>
+            <p>Género Predominante</p>
+          </div>
+        </div>
+        <div v-if="analysisData.demographic_analysis && analysisData.demographic_analysis.has_data" class="card demographic wide-card">
+          <div class="card-icon">🎂</div>
+          <div class="card-content">
+            <h3>{{ formatAgeRange(analysisData.demographic_analysis.summary.most_common_age) }}</h3>
+            <p>Edad Más Común</p>
+          </div>
+        </div>
       </div>
 
       <!-- Gráficos principales en primera fila -->
@@ -94,6 +108,40 @@
           <h3>🕐 Tiempo Promedio por Zona</h3>
           <div class="chart-wrapper">
             <canvas ref="dwellByZoneChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráficos demográficos (género y edad) -->
+      <div v-if="analysisData.demographic_analysis && analysisData.demographic_analysis.has_data" class="charts-grid demographic-charts">
+        <div class="chart-container medium">
+          <h3>👥 Distribución por Género</h3>
+          <div class="chart-wrapper">
+            <canvas ref="genderChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-container medium">
+          <h3>🎂 Distribución por Edad</h3>
+          <div class="chart-wrapper">
+            <canvas ref="ageChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráficos demográficos por zona -->
+      <div v-if="analysisData.demographic_analysis && analysisData.demographic_analysis.has_data" class="charts-grid demographic-zone-charts">
+        <div class="chart-container large">
+          <h3>👥📍 Género por Zona</h3>
+          <div class="chart-wrapper">
+            <canvas ref="genderByZoneChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-container large">
+          <h3>🎂📍 Edad por Zona</h3>
+          <div class="chart-wrapper">
+            <canvas ref="ageByZoneChart"></canvas>
           </div>
         </div>
       </div>
@@ -330,6 +378,14 @@ export default {
       if (this.analysisData.dwell_time_analysis && this.analysisData.dwell_time_analysis.summary) {
         this.createDwellDistributionChart()
         this.createDwellByZoneChart()
+      }
+
+      // Gráficos demográficos (si hay datos disponibles)
+      if (this.analysisData.demographic_analysis && this.analysisData.demographic_analysis.has_data) {
+        this.createGenderChart()
+        this.createAgeChart()
+        this.createGenderByZoneChart()
+        this.createAgeByZoneChart()
       }
     },
 
@@ -627,6 +683,326 @@ export default {
       }
     },
 
+    createGenderChart() {
+      const ctx = this.$refs.genderChart
+      
+      if (!ctx) {
+        console.error('Gender chart canvas not found')
+        return
+      }
+
+      const genderData = this.analysisData.demographic_analysis.gender_distribution
+      console.log('Gender data:', genderData)
+      
+      if (!genderData || !genderData.counts) {
+        console.error('No gender data available')
+        return
+      }
+
+      const labels = []
+      const data = []
+      const colors = []
+      
+      for (const [gender, count] of Object.entries(genderData.counts)) {
+        labels.push(gender === 'M' ? '♂ Masculino' : '♀ Femenino')
+        data.push(count)
+        colors.push(gender === 'M' ? 'rgba(54, 162, 235, 0.8)' : 'rgba(255, 99, 132, 0.8)')
+      }
+
+      try {
+        this.charts.genderChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Personas',
+              data: data,
+              backgroundColor: colors,
+              borderColor: colors.map(c => c.replace('0.8', '1')),
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom'
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const label = context.label || ''
+                    const value = context.parsed
+                    const percentage = genderData.percentages[context.label.includes('♂') ? 'M' : 'F']
+                    return `${label}: ${value} (${percentage}%)`
+                  }
+                }
+              }
+            }
+          }
+        })
+        console.log('Gender chart created successfully')
+      } catch (error) {
+        console.error('Error creating gender chart:', error)
+      }
+    },
+
+    createAgeChart() {
+      const ctx = this.$refs.ageChart
+      
+      if (!ctx) {
+        console.error('Age chart canvas not found')
+        return
+      }
+
+      const ageData = this.analysisData.demographic_analysis.age_distribution
+      console.log('Age data:', ageData)
+      
+      if (!ageData || !ageData.counts) {
+        console.error('No age data available')
+        return
+      }
+
+      // Ordenar rangos de edad de menor a mayor
+      const ageOrder = ['0-18', '19-35', '36-60', '60+', 'Desconocido']
+      const labels = []
+      const data = []
+      const colors = [
+        'rgba(75, 192, 192, 0.8)',
+        'rgba(54, 162, 235, 0.8)',
+        'rgba(153, 102, 255, 0.8)',
+        'rgba(255, 159, 64, 0.8)',
+        'rgba(201, 203, 207, 0.8)'
+      ]
+
+      ageOrder.forEach((age, index) => {
+        if (ageData.counts[age]) {
+          labels.push(this.formatAgeRange(age))
+          data.push(ageData.counts[age])
+        }
+      })
+
+      try {
+        this.charts.ageChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Personas',
+              data: data,
+              backgroundColor: colors.slice(0, labels.length),
+              borderColor: colors.slice(0, labels.length).map(c => c.replace('0.8', '1')),
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const value = context.parsed.y
+                    const age = context.label
+                    // Buscar el percentage correspondiente
+                    let percentage = 0
+                    for (const [key, val] of Object.entries(ageData.counts)) {
+                      if (age.includes(key) || age.includes(this.formatAgeRange(key))) {
+                        percentage = ageData.percentages[key]
+                        break
+                      }
+                    }
+                    return `${age}: ${value} personas (${percentage}%)`
+                  }.bind(this)
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Número de Personas'
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Rango de Edad'
+                }
+              }
+            }
+          }
+        })
+        console.log('Age chart created successfully')
+      } catch (error) {
+        console.error('Error creating age chart:', error)
+      }
+    },
+
+    createGenderByZoneChart() {
+      const ctx = this.$refs.genderByZoneChart
+      
+      if (!ctx) {
+        console.error('Gender by zone chart canvas not found')
+        return
+      }
+
+      const genderByZone = this.analysisData.demographic_analysis.gender_by_zone
+      console.log('Gender by zone data:', genderByZone)
+      
+      if (!genderByZone || Object.keys(genderByZone).length === 0) {
+        console.error('No gender by zone data available')
+        return
+      }
+
+      const zones = Object.keys(genderByZone).sort()
+      const maleData = []
+      const femaleData = []
+
+      zones.forEach(zone => {
+        const counts = genderByZone[zone].counts
+        maleData.push(counts['M'] || 0)
+        femaleData.push(counts['F'] || 0)
+      })
+
+      try {
+        this.charts.genderByZoneChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: zones.map(z => this.formatZoneName(z)),
+            datasets: [{
+              label: '♂ Masculino',
+              data: maleData,
+              backgroundColor: 'rgba(54, 162, 235, 0.8)',
+              borderColor: 'rgba(54, 162, 235, 1)',
+              borderWidth: 2
+            }, {
+              label: '♀ Femenino',
+              data: femaleData,
+              backgroundColor: 'rgba(255, 99, 132, 0.8)',
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'top'
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Número de Personas'
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Zonas'
+                }
+              }
+            }
+          }
+        })
+        console.log('Gender by zone chart created successfully')
+      } catch (error) {
+        console.error('Error creating gender by zone chart:', error)
+      }
+    },
+
+    createAgeByZoneChart() {
+      const ctx = this.$refs.ageByZoneChart
+      
+      if (!ctx) {
+        console.error('Age by zone chart canvas not found')
+        return
+      }
+
+      const ageByZone = this.analysisData.demographic_analysis.age_by_zone
+      console.log('Age by zone data:', ageByZone)
+      
+      if (!ageByZone || Object.keys(ageByZone).length === 0) {
+        console.error('No age by zone data available')
+        return
+      }
+
+      const zones = Object.keys(ageByZone).sort()
+      const ageRanges = ['0-18', '19-35', '36-60', '60+']
+      const colors = [
+        'rgba(75, 192, 192, 0.8)',
+        'rgba(54, 162, 235, 0.8)',
+        'rgba(153, 102, 255, 0.8)',
+        'rgba(255, 159, 64, 0.8)'
+      ]
+
+      const datasets = ageRanges.map((range, index) => {
+        const data = zones.map(zone => {
+          const counts = ageByZone[zone].counts
+          return counts[range] || 0
+        })
+
+        return {
+          label: this.formatAgeRange(range),
+          data: data,
+          backgroundColor: colors[index],
+          borderColor: colors[index].replace('0.8', '1'),
+          borderWidth: 2
+        }
+      })
+
+      try {
+        this.charts.ageByZoneChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: zones.map(z => this.formatZoneName(z)),
+            datasets: datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'top'
+              }
+            },
+            scales: {
+              y: {
+                stacked: true,
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Número de Personas'
+                }
+              },
+              x: {
+                stacked: true,
+                title: {
+                  display: true,
+                  text: 'Zonas'
+                }
+              }
+            }
+          }
+        })
+        console.log('Age by zone chart created successfully')
+      } catch (error) {
+        console.error('Error creating age by zone chart:', error)
+      }
+    },
+
     destroyCharts() {
       Object.values(this.charts).forEach(chart => {
         if (chart) chart.destroy()
@@ -651,6 +1027,17 @@ export default {
 
     formatTransition(transition) {
       return transition.replace(/_to_/g, ' → ').replace(/zone_/g, 'Zona ')
+    },
+
+    formatAgeRange(age) {
+      const ageLabels = {
+        '0-18': '0-18 años',
+        '19-35': '19-35 años',
+        '36-60': '36-60 años',
+        '60+': '60+ años',
+        'Desconocido': 'Desconocido'
+      }
+      return ageLabels[age] || age
     }
   },
 
@@ -799,6 +1186,26 @@ export default {
   font-size: 1.1em;
 }
 
+.card.demographic {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.card.demographic .card-content h3,
+.card.demographic .card-content p {
+  color: white;
+}
+
+.card.wide-card {
+  grid-column: span 2;
+}
+
+@media (max-width: 768px) {
+  .card.wide-card {
+    grid-column: span 1;
+  }
+}
+
 .charts-grid {
   display: grid;
   gap: 25px;
@@ -810,6 +1217,14 @@ export default {
 }
 
 .dwell-charts {
+  grid-template-columns: 1fr 1fr;
+}
+
+.demographic-charts {
+  grid-template-columns: 1fr 1fr;
+}
+
+.demographic-zone-charts {
   grid-template-columns: 1fr 1fr;
 }
 
@@ -826,7 +1241,9 @@ export default {
 
 @media (max-width: 1200px) {
   .main-charts,
-  .dwell-charts {
+  .dwell-charts,
+  .demographic-charts,
+  .demographic-zone-charts {
     grid-template-columns: 1fr;
   }
   
