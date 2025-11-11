@@ -108,10 +108,146 @@ Los modelos de detección demográfica se descargan desde Hugging Face:
 
 **Total**: ~700 MB
 
+#### ⚠️ **IMPORTANTE: Configuración de Modelos NTQAI**
+
+El script `download_ntoai_models.py` descarga automáticamente:
+
+1. **Archivos de modelos**:
+   - `ntqai_gender.bin` (347 MB)
+   - `ntqai_age.bin` (347 MB)
+
+2. **Archivos de configuración**:
+   - `ntqai_gender_config.json` (mapeo de labels de género)
+   - `ntqai_age_config.json` (mapeo de labels de edad)
+
+3. **Adaptador de integración**:
+   - `ntqai_adapter.py` (interfaz Python para los modelos)
+
+**El script crea estos 5 archivos automáticamente en `Backend/models/`**. Si faltan, el sistema de análisis demográfico no funcionará.
+
+#### ✅ **Verificar Instalación de Modelos**
+
+```bash
+# Windows
+cd Backend\models
+dir ntqai*.*
+
+# Linux/Mac
+cd Backend/models
+ls -lh ntqai*.*
+```
+
+**Deberías ver**:
+```
+ntqai_adapter.py         (~8 KB)
+ntqai_age.bin           (347 MB)
+ntqai_age_config.json   (~1 KB)
+ntqai_gender.bin        (347 MB)
+ntqai_gender_config.json (~1 KB)
+```
+
+Si faltan archivos, ejecuta nuevamente:
+```bash
+python download_ntoai_models.py
+```
+
 > **Nota**: La primera ejecución de `download_ntoai_models.py` puede tardar varios minutos dependiendo de tu conexión a internet.
 
 
-## 📦 Instalación Manual
+## 🆕 Instalación en PC Nuevo (Guía Completa)
+
+Si estás instalando el proyecto en una máquina nueva por primera vez, sigue esta lista de verificación:
+
+### ✅ **Checklist de Instalación**
+
+1. **Prerrequisitos del Sistema**
+   - [ ] Python 3.11+ instalado (`python --version`)
+   - [ ] Node.js 20+ instalado (`node --version`)
+   - [ ] Git instalado (`git --version`)
+   - [ ] ~2 GB de espacio libre en disco
+
+2. **Clonar y Preparar**
+   ```bash
+   git clone https://github.com/PulentoJose-edu/people-tracking-system.git
+   cd people-tracking-system
+   ```
+
+3. **Instalar Dependencias**
+   ```bash
+   # Windows
+   setup.bat
+   
+   # Linux/Mac
+   chmod +x setup.sh && ./setup.sh
+   ```
+
+4. **⚠️ CRÍTICO: Descargar Modelos NTQAI**
+   ```bash
+   # Windows
+   cd Backend\models
+   python download_ntoai_models.py
+   
+   # Linux/Mac
+   cd Backend/models
+   python download_ntoai_models.py
+   ```
+   
+   **Este paso descarga ~700MB y crea 5 archivos esenciales**:
+   - `ntqai_gender.bin` + `ntqai_gender_config.json`
+   - `ntqai_age.bin` + `ntqai_age_config.json`
+   - `ntqai_adapter.py` (generado automáticamente)
+
+5. **Verificar que TODO esté listo**
+   ```bash
+   # Windows
+   dir ntqai*.*
+   
+   # Linux/Mac
+   ls -lh ntqai*.*
+   ```
+   
+   Debes ver **5 archivos** (total ~700MB)
+
+6. **Iniciar la Aplicación**
+   ```bash
+   # Volver a la raíz del proyecto
+   cd ..\..  # Windows
+   cd ../..  # Linux/Mac
+   
+   # Iniciar
+   start.bat  # Windows
+   ./start.sh # Linux/Mac
+   ```
+
+7. **✅ VERIFICAR INSTALACIÓN (Recomendado)**
+   ```bash
+   python verify_setup.py
+   ```
+   
+   Este script verifica:
+   - Versión de Python y Node.js
+   - Paquetes instalados
+   - Modelos NTQAI descargados (5 archivos)
+   - Estructura de directorios
+   - Puertos disponibles
+
+8. **Abrir en el Navegador**
+   - Frontend: http://localhost:5173
+   - Backend API: http://127.0.0.1:8000/docs
+
+### 🚨 **Errores Comunes en Primera Instalación**
+
+| Error | Solución |
+|-------|----------|
+| "ModuleNotFoundError: No module named 'transformers'" | `pip install transformers>=4.50.0` |
+| "NTQAI models not found" | Ejecutar `download_ntoai_models.py` |
+| "No se pudo cargar modelo PAR" | Verificar que existan los 5 archivos `ntqai_*.*` |
+| "huggingface_hub not found" | `pip install huggingface_hub` |
+| Backend no inicia | Verificar que el puerto 8000 esté libre |
+
+---
+
+## 📦 Instalación Manual (Avanzada)
 
 ### Prerrequisitos
 
@@ -129,7 +265,7 @@ cd Backend
 # Instalar dependencias Python
 pip install -r requirements.txt
 
-# Descargar modelos NTQAI (género + edad)
+# CRÍTICO: Descargar modelos NTQAI (género + edad + configs)
 cd models
 python download_ntoai_models.py
 cd ..
@@ -516,10 +652,37 @@ pip install numpy==1.26.4
 pip install opencv-python-headless==4.10.0.84
 ```
 
-#### ❌ **Error: "No se pudo cargar modelo PAR"**
+#### ❌ **Error: "No se pudo cargar modelo PAR"** o **"NTQAI models not found"**
+
+**Causa**: Los modelos NTQAI no están descargados o faltan archivos de configuración.
+
+**Solución completa**:
 ```bash
-# Descargar modelos NTQAI
+# 1. Ve al directorio de modelos
 cd Backend/models
+
+# 2. Ejecuta el script de descarga (crea 5 archivos necesarios)
+python download_ntoai_models.py
+
+# 3. Verifica que se crearon todos los archivos
+# Windows:
+dir ntqai*.*
+
+# Linux/Mac:
+ls -lh ntqai*.*
+
+# Deberías ver:
+# - ntqai_adapter.py (adaptador Python)
+# - ntqai_gender.bin (modelo de género)
+# - ntqai_gender_config.json (configuración)
+# - ntqai_age.bin (modelo de edad)
+# - ntqai_age_config.json (configuración)
+```
+
+**Si el error persiste**:
+```bash
+# Eliminar archivos existentes y descargar de nuevo
+rm ntqai_*.* (o del *.*)  # Linux/Mac (o Windows)
 python download_ntoai_models.py
 ```
 
@@ -573,6 +736,69 @@ python -c "import os; print('Gender:', os.path.exists('models/ntqai_gender.bin')
 cd ../frontend
 npm list vue chart.js axios
 ```
+
+---
+
+## 🧪 Pruebas de Rendimiento
+
+El sistema incluye herramientas completas para medir tiempos de respuesta del backend y dashboard.
+
+### Quick Start
+
+#### Probar Backend (con task_id existente)
+```bash
+python test_performance.py --task-id TU_TASK_ID_AQUI
+```
+
+#### Probar Dashboard
+```bash
+# Instalar dependencias
+pip install selenium
+
+# Ejecutar prueba
+python test_dashboard_performance.py --tool selenium
+```
+
+#### Script Interactivo (Windows)
+```bash
+run_performance_tests.bat
+```
+
+### Métricas Clave
+
+| Componente | Métrica | Objetivo |
+|------------|---------|----------|
+| **Backend API** | `/analytics/analyze` | < 500ms |
+| **Backend API** | `/status/{task_id}` | < 100ms |
+| **Backend Streaming** | Video TTFB | < 200ms |
+| **Dashboard** | Page Load | < 3s |
+| **Dashboard** | First Contentful Paint | < 1.8s |
+| **Dashboard** | Time to Interactive | < 3.8s |
+
+### Herramientas Disponibles
+
+- **`test_performance.py`**: Pruebas completas del backend
+  - Tiempo de carga de video
+  - Tiempo de procesamiento
+  - Latencia de APIs
+  - Streaming de video
+
+- **`test_dashboard_performance.py`**: Pruebas del frontend
+  - Tiempo de carga de página
+  - Métricas de renderizado
+  - Performance del navegador
+  - Auditoría con Lighthouse
+
+- **`run_performance_tests.bat`**: Script interactivo para Windows
+
+### Documentación Completa
+
+Ver **`GUIA_PRUEBAS_RENDIMIENTO.md`** para:
+- ✅ Instrucciones detalladas de uso
+- ✅ Interpretación de resultados
+- ✅ Web Vitals y métricas clave
+- ✅ Casos de uso comunes
+- ✅ Solución de problemas
 
 ---
 
@@ -742,6 +968,7 @@ Este proyecto está bajo la **Licencia MIT**. Ver el archivo `LICENSE` para más
 
 - **API Docs**: http://127.0.0.1:8000/docs (cuando el backend esté corriendo)
 - **Guía de Testing**: `GUIA_PRUEBA_GRAFICOS_DEMOGRAFICOS.md`
+- **Guía de Pruebas de Rendimiento**: `GUIA_PRUEBAS_RENDIMIENTO.md` ⭐ NUEVO
 - **Feature PAR**: `FEATURE_PAR_README.md`
 - **Modelos NTQAI**: `Backend/models/README_NTQAI.md`
 - **Sistema PAR**: `Backend/models/README_PAR.md`

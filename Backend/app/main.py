@@ -25,6 +25,25 @@ OUTPUT_DIR = "Backend/outputs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+@app.get("/")
+async def root():
+    """Root endpoint - API info"""
+    return {
+        "name": "People Tracking API",
+        "version": "1.0.0",
+        "status": "running",
+        "docs": "/docs"
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "people-tracking-backend",
+        "version": "1.0.0"
+    }
+
 @app.post("/upload-and-process/")
 async def upload_and_process(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     task_id = str(uuid.uuid4())
