@@ -161,14 +161,17 @@ class NTQAIModelsAdapter:
                     gender_config = json.load(f)
                     self.gender_labels = gender_config.get('id2label', {})
                 
-                # Cargar modelo
-                state_dict = torch.load(gender_path, map_location=self.device)
+                # Crear modelo base primero
                 self.gender_model = BeitForImageClassification.from_pretrained(
                     "microsoft/beit-base-patch16-224-pt22k-ft22k",
-                    state_dict=state_dict,
                     num_labels=2,
                     ignore_mismatched_sizes=True
                 )
+                
+                # Cargar state_dict DESPUÉS
+                state_dict = torch.load(gender_path, map_location=self.device, weights_only=False)
+                self.gender_model.load_state_dict(state_dict, strict=False)
+                
                 self.gender_model.to(self.device)
                 self.gender_model.eval()
                 
@@ -194,14 +197,17 @@ class NTQAIModelsAdapter:
                     age_config = json.load(f)
                     self.age_labels = age_config.get('id2label', {})
                 
-                # Cargar modelo
-                state_dict = torch.load(age_path, map_location=self.device)
+                # Crear modelo base primero
                 self.age_model = BeitForImageClassification.from_pretrained(
                     "microsoft/beit-base-patch16-224-pt22k-ft22k",
-                    state_dict=state_dict,
                     num_labels=5,
                     ignore_mismatched_sizes=True
                 )
+                
+                # Cargar state_dict DESPUÉS
+                state_dict = torch.load(age_path, map_location=self.device, weights_only=False)
+                self.age_model.load_state_dict(state_dict, strict=False)
+                
                 self.age_model.to(self.device)
                 self.age_model.eval()
                 

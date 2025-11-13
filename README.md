@@ -693,6 +693,24 @@ pip install torch>=2.1.0 torchvision
 pip install transformers>=4.50.0
 ```
 
+#### ❌ **Error: "state_dict cannot be passed together with a model name"**
+
+**Causa**: Versión incompatible de `transformers` (4.46+) cambió la API de carga de modelos.
+
+**Solución**:
+```bash
+# Opción 1: Actualizar el adaptador (recomendado)
+cd Backend/models
+python download_ntoai_models.py  # Regenera ntqai_adapter.py con código corregido
+
+# Opción 2: Si el error persiste, verifica versiones
+pip install transformers==4.57.1 torch>=2.9.0
+```
+
+**Explicación técnica**: El error ocurre porque versiones nuevas de `transformers` no permiten pasar `state_dict` directamente en `from_pretrained()`. El código corregido:
+1. Primero crea el modelo base: `BeitForImageClassification.from_pretrained(...)`
+2. Luego carga los pesos: `model.load_state_dict(state_dict, strict=False)`
+
 #### ❌ **Puerto ocupado**
 - **Backend**: Cambia el puerto en el comando uvicorn:
   ```bash
@@ -969,6 +987,7 @@ Este proyecto está bajo la **Licencia MIT**. Ver el archivo `LICENSE` para más
 - **API Docs**: http://127.0.0.1:8000/docs (cuando el backend esté corriendo)
 - **Guía de Testing**: `GUIA_PRUEBA_GRAFICOS_DEMOGRAFICOS.md`
 - **Guía de Pruebas de Rendimiento**: `GUIA_PRUEBAS_RENDIMIENTO.md` ⭐ NUEVO
+- **Fix Error NTQAI**: `FIX_NTQAI_ERROR.md` 🔧 **Si tienes error de state_dict**
 - **Feature PAR**: `FEATURE_PAR_README.md`
 - **Modelos NTQAI**: `Backend/models/README_NTQAI.md`
 - **Sistema PAR**: `Backend/models/README_PAR.md`

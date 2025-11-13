@@ -38,15 +38,17 @@ class NTQAIModelsAdapter:
                     gender_config = json.load(f)
                     self.gender_labels = gender_config.get('id2label', {})
                 
-                # Cargar modelo base
+                # Crear modelo base primero (sin cargar desde pretrained con state_dict)
                 self.gender_model = BeitForImageClassification.from_pretrained(
                     "microsoft/beit-base-patch16-224-pt22k-ft22k",
                     num_labels=2,
                     ignore_mismatched_sizes=True
                 )
                 
-                # Cargar state_dict del modelo entrenado
-                state_dict = torch.load(gender_path, map_location=self.device)
+                # Cargar state_dict del modelo entrenado DESPUÉS
+                state_dict = torch.load(gender_path, map_location=self.device, weights_only=False)
+                
+                # Cargar los pesos en el modelo
                 self.gender_model.load_state_dict(state_dict, strict=False)
                 
                 self.gender_model.to(self.device)
@@ -74,15 +76,17 @@ class NTQAIModelsAdapter:
                     age_config = json.load(f)
                     self.age_labels = age_config.get('id2label', {})
                 
-                # Cargar modelo base
+                # Crear modelo base primero (sin cargar desde pretrained con state_dict)
                 self.age_model = BeitForImageClassification.from_pretrained(
                     "microsoft/beit-base-patch16-224-pt22k-ft22k",
                     num_labels=5,
                     ignore_mismatched_sizes=True
                 )
                 
-                # Cargar state_dict del modelo entrenado
-                state_dict = torch.load(age_path, map_location=self.device)
+                # Cargar state_dict del modelo entrenado DESPUÉS
+                state_dict = torch.load(age_path, map_location=self.device, weights_only=False)
+                
+                # Cargar los pesos en el modelo
                 self.age_model.load_state_dict(state_dict, strict=False)
                 
                 self.age_model.to(self.device)
