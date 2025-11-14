@@ -304,7 +304,7 @@ class NTQAIModelsAdapter:
 # Función de compatibilidad con la interfaz anterior
 def create_ntqai_model():
     """Crea y carga los modelos NTQAI"""
-    adapter = NTOAIModelsAdapter()
+    adapter = NTQAIModelsAdapter()
     if adapter.load_models():
         return adapter
     return None
