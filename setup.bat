@@ -4,7 +4,7 @@ echo   People Tracking System - Setup
 echo ===========================================
 echo.
 
-echo [1/5] Verificando Python...
+echo [1/6] Verificando Python...
 python --version
 if %errorlevel% neq 0 (
     echo ERROR: Python no esta instalado. Por favor instala Python 3.11+
@@ -13,7 +13,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [2/5] Verificando Node.js...
+echo [2/6] Verificando Node.js...
 node --version
 if %errorlevel% neq 0 (
     echo ERROR: Node.js no esta instalado. Por favor instala Node.js 18+
@@ -22,7 +22,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [3/5] Creando entorno virtual de Python...
+echo [3/6] Creando entorno virtual de Python...
 if not exist .venv (
     python -m venv .venv
     echo Entorno virtual creado.
@@ -30,13 +30,21 @@ if not exist .venv (
     echo Entorno virtual ya existe.
 )
 
-echo [4/5] Instalando dependencias del Backend...
+echo [4/6] Instalando dependencias del Backend...
 .venv\Scripts\pip install -r Backend\requirements.txt
 
-echo [5/5] Instalando dependencias del Frontend...
+echo [5/6] Instalando dependencias del Frontend...
 cd frontend
-npm install
+call npm install
 cd ..
+
+echo [6/6] Descargando modelos NTQAI...
+echo Esto puede tomar unos minutos (~700MB)...
+call .venv\Scripts\python Backend\models\download_ntoai_models.py
+if %errorlevel% neq 0 (
+    echo ADVERTENCIA: Error al descargar los modelos NTQAI.
+    echo Puedes descargarlos manualmente mas tarde con: python Backend\models\download_ntoai_models.py
+)
 
 echo.
 echo ===========================================
