@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard">
     <div class="dashboard-header">
-      <h1>📊 Analytics Dashboard</h1>
+      <h1>📊 Analytics Dashboard por Zonas</h1>
       <div class="controls">
         <select v-model="selectedTaskId" @change="loadTaskData" class="task-selector">
           <option value="">Seleccionar tarea...</option>
@@ -24,266 +24,175 @@
       <p>❌ {{ error }}</p>
     </div>
 
-    <div v-else-if="analysisData" class="dashboard-content">
-      <!-- Tarjetas de resumen -->
-      <div class="summary-cards">
-        <div class="card">
-          <div class="card-icon">👥</div>
-          <div class="card-content">
-            <h3>{{ analysisData.summary.total_detections }}</h3>
-            <p>Total Detecciones</p>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-icon">🚶</div>
-          <div class="card-content">
-            <h3>{{ analysisData.summary.unique_persons }}</h3>
-            <p>Personas Únicas</p>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-icon">⏱️</div>
-          <div class="card-content">
-            <h3>{{ analysisData.summary.duration_seconds.toFixed(1) }}s</h3>
-            <p>Duración</p>
-          </div>
-        </div>
-        <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="card">
-          <div class="card-icon">⏳</div>
-          <div class="card-content">
-            <h3>{{ analysisData.dwell_time_analysis.summary.overall_average.toFixed(1) }}s</h3>
-            <p>Permanencia Promedio</p>
-          </div>
-        </div>
-        <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="card">
-          <div class="card-icon">🔢</div>
-          <div class="card-content">
-            <h3>{{ analysisData.dwell_time_analysis.summary.total_measured_visits }}</h3>
-            <p>Visitas Medidas</p>
-          </div>
-        </div>
-        <div v-if="analysisData.demographic_analysis && analysisData.demographic_analysis.has_data" class="card demographic wide-card">
-          <div class="card-icon">👤</div>
-          <div class="card-content">
-            <h3>{{ analysisData.demographic_analysis.summary.most_common_gender === 'M' ? '♂️' : '♀️' }}</h3>
-            <p>Género Predominante</p>
-          </div>
-        </div>
-        <div v-if="analysisData.demographic_analysis && analysisData.demographic_analysis.has_data" class="card demographic wide-card">
-          <div class="card-icon">🎂</div>
-          <div class="card-content">
-            <h3>{{ formatAgeRange(analysisData.demographic_analysis.summary.most_common_age) }}</h3>
-            <p>Edad Más Común</p>
-          </div>
+    <div v-else-if="selectedTaskId" class="dashboard-content">
+      <!-- Sistema de Pestañas -->
+      <div class="tabs-container">
+        <div class="tabs">
+          <button 
+            v-for="zone in [0, 1, 2, 3]" 
+            :key="zone"
+            :class="['tab-button', { active: activeZone === zone }]"
+            @click="selectZone(zone)"
+          >
+            📍 Zona {{ zone }}
+          </button>
         </div>
       </div>
 
-      <!-- Gráficos principales en primera fila -->
-      <div class="charts-grid main-charts">
-        <div class="chart-container large">
-          <h3>📊 Distribución por Zonas</h3>
-          <div class="chart-wrapper">
-            <canvas ref="zoneChart"></canvas>
-          </div>
-        </div>
-
-        <div class="chart-container large">
-          <h3>⏰ Actividad Temporal</h3>
-          <div class="chart-wrapper">
-            <canvas ref="timelineChart"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Gráficos de tiempo de permanencia en segunda fila -->
-      <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="charts-grid dwell-charts">
-        <div class="chart-container medium">
-          <h3>⏳ Distribución de Tiempo de Permanencia</h3>
-          <div class="chart-wrapper">
-            <canvas ref="dwellDistributionChart"></canvas>
-          </div>
-        </div>
-
-        <div class="chart-container medium">
-          <h3>🕐 Tiempo Promedio por Zona</h3>
-          <div class="chart-wrapper">
-            <canvas ref="dwellByZoneChart"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Gráficos demográficos (género y edad) -->
-      <div v-if="analysisData.demographic_analysis && analysisData.demographic_analysis.has_data" class="charts-grid demographic-charts">
-        <div class="chart-container medium">
-          <h3>👥 Distribución por Género</h3>
-          <div class="chart-wrapper">
-            <canvas ref="genderChart"></canvas>
-          </div>
-        </div>
-
-        <div class="chart-container medium">
-          <h3>🎂 Distribución por Edad</h3>
-          <div class="chart-wrapper">
-            <canvas ref="ageChart"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Gráficos demográficos por zona -->
-      <div v-if="analysisData.demographic_analysis && analysisData.demographic_analysis.has_data" class="charts-grid demographic-zone-charts">
-        <div class="chart-container large">
-          <h3>👥📍 Género por Zona</h3>
-          <div class="chart-wrapper">
-            <canvas ref="genderByZoneChart"></canvas>
-          </div>
-        </div>
-
-        <div class="chart-container large">
-          <h3>🎂📍 Edad por Zona</h3>
-          <div class="chart-wrapper">
-            <canvas ref="ageByZoneChart"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Información detallada en tercera fila -->
-      <div class="info-grid">
-        <div class="chart-container">
-          <h3>🔄 Transiciones entre Zonas</h3>
-          <div class="flow-visualization">
-            <div v-if="analysisData.flow_analysis.zone_transitions" class="flow-items">
-              <div 
-                v-for="(count, transition) in analysisData.flow_analysis.zone_transitions" 
-                :key="transition"
-                class="flow-item"
-              >
-                <span class="transition-name">{{ formatTransition(transition) }}</span>
-                <span class="transition-count">{{ count }} movimientos</span>
-              </div>
+      <!-- Contenido de la Zona Activa -->
+      <div v-if="zoneData[activeZone]" class="zone-content">
+        <!-- Tarjetas de resumen para la zona -->
+        <div class="summary-cards">
+          <div class="card">
+            <div class="card-icon">🚶</div>
+            <div class="card-content">
+              <h3>{{ zoneData[activeZone].real_visits.total_real_visits }}</h3>
+              <p>Visitas Reales</p>
             </div>
-            <div v-else class="no-data">
-              No se detectaron transiciones entre zonas
+          </div>
+          <div class="card">
+            <div class="card-icon">👥</div>
+            <div class="card-content">
+              <h3>{{ zoneData[activeZone].real_visits.unique_persons }}</h3>
+              <p>Personas Únicas</p>
+            </div>
+          </div>
+          <div v-if="zoneData[activeZone].dwell_time.average_dwell_time" class="card">
+            <div class="card-icon">⏳</div>
+            <div class="card-content">
+              <h3>{{ zoneData[activeZone].dwell_time.average_dwell_time.toFixed(1) }}s</h3>
+              <p>Tiempo Promedio</p>
+            </div>
+          </div>
+          <div v-if="zoneData[activeZone].gender_distribution.has_data" class="card demographic">
+            <div class="card-icon">👤</div>
+            <div class="card-content">
+              <h3>{{ zoneData[activeZone].gender_distribution.most_common === 'M' ? '♂️' : '♀️' }}</h3>
+              <p>Género Predominante</p>
+            </div>
+          </div>
+          <div v-if="zoneData[activeZone].age_distribution.has_data" class="card demographic">
+            <div class="card-icon">🎂</div>
+            <div class="card-content">
+              <h3>{{ formatAgeRange(zoneData[activeZone].age_distribution.most_common) }}</h3>
+              <p>Edad Más Común</p>
             </div>
           </div>
         </div>
 
-        <div class="chart-container">
-          <h3>📈 Estadísticas por Zona</h3>
-          <div class="zone-stats">
-            <div 
-              v-for="(zoneData, zoneName) in analysisData.zone_analysis" 
-              :key="zoneName"
-              class="zone-stat-item"
-            >
-              <h4>{{ formatZoneName(zoneName) }}</h4>
-              <div class="zone-details">
-                <p><strong>Entradas:</strong> {{ zoneData.total_entries }}</p>
-                <p><strong>Personas únicas:</strong> {{ zoneData.unique_persons }}</p>
-                <p><strong>Duración activa:</strong> {{ zoneData.activity_duration.toFixed(1) }}s</p>
-              </div>
+        <!-- Gráficos para la zona activa -->
+        <div class="charts-grid zone-charts">
+          <!-- Gráfico de Visitas Reales -->
+          <div class="chart-container medium">
+            <h3>🚶 Distribución de Visitas Reales - Zona {{ activeZone }}</h3>
+            <div class="chart-wrapper">
+              <canvas :ref="el => { if (el) visitsChartRef = el }"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico de Tiempo de Permanencia -->
+          <div v-if="zoneData[activeZone].dwell_time.distribution" class="chart-container medium">
+            <h3>⏳ Distribución de Tiempo de Permanencia - Zona {{ activeZone }}</h3>
+            <div class="chart-wrapper">
+              <canvas :ref="el => { if (el) dwellChartRef = el }"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico de Género -->
+          <div v-if="zoneData[activeZone].gender_distribution.has_data" class="chart-container medium">
+            <h3>👥 Distribución por Género - Zona {{ activeZone }}</h3>
+            <div class="chart-wrapper">
+              <canvas :ref="el => { if (el) genderChartRef = el }"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico de Edad -->
+          <div v-if="zoneData[activeZone].age_distribution.has_data" class="chart-container medium">
+            <h3>🎂 Distribución por Edad - Zona {{ activeZone }}</h3>
+            <div class="chart-wrapper">
+              <canvas :ref="el => { if (el) ageChartRef = el }"></canvas>
             </div>
           </div>
         </div>
 
-        <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.by_zone" class="chart-container wide">
-          <h3>📊 Estadísticas de Permanencia por Zona</h3>
-          <div class="dwell-stats">
-            <div 
-              v-for="(zoneData, zoneName) in analysisData.dwell_time_analysis.by_zone" 
-              :key="zoneName"
-              class="dwell-stat-item"
-            >
-              <h4>{{ formatZoneName(zoneName) }}</h4>
-              <div class="dwell-details" v-if="typeof zoneData === 'object' && zoneData.average_dwell_time">
-                <p><strong>Tiempo promedio:</strong> {{ zoneData.average_dwell_time.toFixed(1) }}s</p>
-                <p><strong>Tiempo mediano:</strong> {{ zoneData.median_dwell_time.toFixed(1) }}s</p>
-                <p><strong>Visitas totales:</strong> {{ zoneData.total_visits }}</p>
-                <p><strong>Permanencia máxima:</strong> {{ zoneData.max_dwell_time.toFixed(1) }}s</p>
-                <p><strong>Permanencia mínima:</strong> {{ zoneData.min_dwell_time.toFixed(1) }}s</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Información adicional -->
-      <div class="additional-info">
-        <div class="summary-row">
-          <div class="info-section activity-section">
-            <h3>🎯 Resumen de Actividad</h3>
-            <div class="activity-summary">
+        <!-- Información detallada de la zona -->
+        <div class="zone-details-section">
+          <div class="info-section">
+            <h3>📊 Estadísticas de Visitas - Zona {{ activeZone }}</h3>
+            <div class="stats-grid">
               <div class="metric-item">
-                <span class="metric-label">Pico de actividad:</span>
-                <span class="metric-value">{{ analysisData.temporal_analysis.peak_activity.timestamp.toFixed(1) }}s 
-                  ({{ analysisData.temporal_analysis.peak_activity.detections }} detecciones)</span>
+                <span class="metric-label">Visitas totales:</span>
+                <span class="metric-value">{{ zoneData[activeZone].real_visits.total_real_visits }}</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Promedio por segundo:</span>
-                <span class="metric-value">{{ analysisData.temporal_analysis.average_detections_per_second.toFixed(2) }} detecciones/s</span>
+                <span class="metric-label">Personas únicas:</span>
+                <span class="metric-value">{{ zoneData[activeZone].real_visits.unique_persons }}</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Tasa de detección:</span>
-                <span class="metric-value">{{ analysisData.summary.detection_rate.toFixed(2) }} detecciones/frame</span>
+                <span class="metric-label">Promedio visitas/persona:</span>
+                <span class="metric-value">{{ zoneData[activeZone].real_visits.average_visits_per_person.toFixed(2) }}</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Máx visitas de una persona:</span>
+                <span class="metric-value">{{ zoneData[activeZone].real_visits.max_visits_by_one_person }}</span>
               </div>
             </div>
           </div>
 
-          <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="info-section dwell-section">
-            <h3>⏳ Resumen de Tiempo de Permanencia</h3>
-            <div class="dwell-summary">
+          <div v-if="zoneData[activeZone].dwell_time.average_dwell_time" class="info-section">
+            <h3>⏳ Estadísticas de Permanencia - Zona {{ activeZone }}</h3>
+            <div class="stats-grid">
               <div class="metric-item">
-                <span class="metric-label">Tiempo promedio global:</span>
-                <span class="metric-value">{{ analysisData.dwell_time_analysis.summary.overall_average.toFixed(1) }}s</span>
+                <span class="metric-label">Tiempo promedio:</span>
+                <span class="metric-value">{{ zoneData[activeZone].dwell_time.average_dwell_time.toFixed(1) }}s</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Tiempo mediano:</span>
-                <span class="metric-value">{{ analysisData.dwell_time_analysis.summary.overall_median.toFixed(1) }}s</span>
+                <span class="metric-value">{{ zoneData[activeZone].dwell_time.median_dwell_time.toFixed(1) }}s</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Permanencia más larga:</span>
-                <span class="metric-value">{{ analysisData.dwell_time_analysis.summary.longest_stay.toFixed(1) }}s</span>
+                <span class="metric-label">Tiempo máximo:</span>
+                <span class="metric-value">{{ zoneData[activeZone].dwell_time.max_dwell_time.toFixed(1) }}s</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Permanencia más corta:</span>
-                <span class="metric-value">{{ analysisData.dwell_time_analysis.summary.shortest_stay.toFixed(1) }}s</span>
+                <span class="metric-label">Tiempo mínimo:</span>
+                <span class="metric-value">{{ zoneData[activeZone].dwell_time.min_dwell_time.toFixed(1) }}s</span>
               </div>
             </div>
           </div>
-        </div>
 
-        <div v-if="analysisData.dwell_time_analysis && analysisData.dwell_time_analysis.summary" class="distribution-overview">
-          <h3>📊 Distribución de Permanencias</h3>
-          <div class="distribution-cards">
-            <div class="dist-card short">
-              <div class="dist-icon">⚡</div>
-              <div class="dist-content">
-                <h4>{{ analysisData.dwell_time_analysis.summary.distribution.under_10s }}</h4>
-                <p>Menos de 10s</p>
+          <div v-if="zoneData[activeZone].gender_distribution.has_data" class="info-section">
+            <h3>👥 Estadísticas de Género - Zona {{ activeZone }}</h3>
+            <div class="stats-grid">
+              <div class="metric-item">
+                <span class="metric-label">Total clasificado:</span>
+                <span class="metric-value">{{ zoneData[activeZone].gender_distribution.total_classified }} personas</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Más común:</span>
+                <span class="metric-value">{{ zoneData[activeZone].gender_distribution.most_common === 'M' ? 'Masculino' : 'Femenino' }}</span>
               </div>
             </div>
-            <div class="dist-card medium-time">
-              <div class="dist-icon">⏱️</div>
-              <div class="dist-content">
-                <h4>{{ analysisData.dwell_time_analysis.summary.distribution['10_30s'] }}</h4>
-                <p>10-30 segundos</p>
+          </div>
+
+          <div v-if="zoneData[activeZone].age_distribution.has_data" class="info-section">
+            <h3>🎂 Estadísticas de Edad - Zona {{ activeZone }}</h3>
+            <div class="stats-grid">
+              <div class="metric-item">
+                <span class="metric-label">Total clasificado:</span>
+                <span class="metric-value">{{ zoneData[activeZone].age_distribution.total_classified }} personas</span>
               </div>
-            </div>
-            <div class="dist-card long">
-              <div class="dist-icon">⏰</div>
-              <div class="dist-content">
-                <h4>{{ analysisData.dwell_time_analysis.summary.distribution['30_60s'] }}</h4>
-                <p>30-60 segundos</p>
-              </div>
-            </div>
-            <div class="dist-card very-long">
-              <div class="dist-icon">🕐</div>
-              <div class="dist-content">
-                <h4>{{ analysisData.dwell_time_analysis.summary.distribution.over_60s }}</h4>
-                <p>Más de 60s</p>
+              <div class="metric-item">
+                <span class="metric-label">Rango más común:</span>
+                <span class="metric-value">{{ formatAgeRange(zoneData[activeZone].age_distribution.most_common) }}</span>
               </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <div v-else-if="zoneData[activeZone] && !zoneData[activeZone].has_data" class="no-data-zone">
+        <p>📊 No hay datos disponibles para la Zona {{ activeZone }}</p>
       </div>
     </div>
 
@@ -305,10 +214,24 @@ export default {
     return {
       selectedTaskId: '',
       availableTasks: [],
-      analysisData: null,
+      activeZone: 0,
+      zoneData: {
+        0: null,
+        1: null,
+        2: null,
+        3: null
+      },
       loading: false,
       error: null,
-      charts: {}
+      charts: {},
+      // Referencias a los canvas
+      visitsChartRef: null,
+      dwellChartRef: null,
+      genderChartRef: null,
+      ageChartRef: null,
+      // Control de timeouts para evitar solapamientos
+      chartCreationTimeout: null,
+      isCreatingCharts: false
     }
   },
   mounted() {
@@ -327,108 +250,231 @@ export default {
     
     async loadTaskData() {
       if (!this.selectedTaskId) {
-        this.analysisData = null
+        this.zoneData = { 0: null, 1: null, 2: null, 3: null }
+        this.destroyCharts()
         return
       }
 
       this.loading = true
       this.error = null
+      
+      // Destruir todos los gráficos existentes antes de cargar nuevos datos
+      this.destroyCharts()
 
       try {
         console.log('Loading data for task:', this.selectedTaskId)
-        const response = await axios.get(`http://127.0.0.1:8000/analytics/analyze/${this.selectedTaskId}`)
-        this.analysisData = response.data
-        console.log('Analysis data loaded:', this.analysisData)
+        
+        // Cargar datos para cada zona (0, 1, 2, 3)
+        const zonePromises = [0, 1, 2, 3].map(zoneId => 
+          axios.get(`http://127.0.0.1:8000/analytics/zone/${this.selectedTaskId}/${zoneId}`)
+            .then(response => ({ zoneId, data: response.data }))
+            .catch(error => {
+              console.error(`Error loading zone ${zoneId}:`, error)
+              return { zoneId, data: { has_data: false, error: error.message } }
+            })
+        )
+        
+        const zoneResults = await Promise.all(zonePromises)
+        
+        // Almacenar datos de cada zona
+        zoneResults.forEach(({ zoneId, data }) => {
+          this.zoneData[zoneId] = data
+        })
+        
+        console.log('Zone data loaded:', this.zoneData)
         
         // Esperar a que Vue actualice el DOM
         await this.$nextTick()
         console.log('DOM updated, creating charts...')
         
+        // Cancelar cualquier creación de gráficos pendiente
+        if (this.chartCreationTimeout) {
+          clearTimeout(this.chartCreationTimeout)
+        }
+        
         // Esperar un poco más para que los canvas estén disponibles
-        setTimeout(() => {
-          this.createCharts()
-        }, 100)
+        this.chartCreationTimeout = setTimeout(() => {
+          this.renderZoneCharts()
+        }, 150)
         
       } catch (error) {
         console.error('Error loading analysis:', error)
         this.error = 'Error loading analysis: ' + error.message
-        this.analysisData = null
+        this.zoneData = { 0: null, 1: null, 2: null, 3: null }
       } finally {
         this.loading = false
       }
     },
-
-    createCharts() {
-      this.destroyCharts()
+    
+    selectZone(zone) {
+      // Cancelar cualquier creación de gráficos pendiente
+      if (this.chartCreationTimeout) {
+        clearTimeout(this.chartCreationTimeout)
+        this.chartCreationTimeout = null
+      }
       
-      if (!this.analysisData) {
-        console.log('No analysis data available for charts')
+      // Si ya estamos creando gráficos, esperar
+      if (this.isCreatingCharts) {
+        this.chartCreationTimeout = setTimeout(() => this.selectZone(zone), 100)
         return
       }
+      
+      this.activeZone = zone
+      
+      // Limpiar los gráficos de los canvas actuales antes del cambio
+      this.destroyCanvasCharts()
+      
+      // Crear gráficos para la nueva zona después de que Vue actualice el DOM
+      this.$nextTick(() => {
+        this.chartCreationTimeout = setTimeout(() => {
+          this.renderZoneCharts()
+        }, 200)
+      })
+    },
 
-      console.log('Creating charts with data:', this.analysisData)
-      
-      // Gráfico de distribución por zonas
-      this.createZoneChart()
-      
-      // Gráfico de línea temporal
-      this.createTimelineChart()
-      
-      // Gráficos de tiempo de permanencia (si hay datos disponibles)
-      if (this.analysisData.dwell_time_analysis && this.analysisData.dwell_time_analysis.summary) {
-        this.createDwellDistributionChart()
-        this.createDwellByZoneChart()
+    renderZoneCharts() {
+      // Prevenir múltiples creaciones simultáneas
+      if (this.isCreatingCharts) {
+        return
       }
+      
+      const zone = this.activeZone
+      const data = this.zoneData[zone]
+      
+      if (!data || !data.has_data) {
+        console.log(`No data available for zone ${zone}`)
+        return
+      }
+      
+      // Siempre renderizar los gráficos (el canvas es nuevo después del cambio de zona)
+      this.createZoneCharts()
+    },
+    
+    createZoneCharts() {
+      // Prevenir múltiples creaciones simultáneas
+      if (this.isCreatingCharts) {
+        return
+      }
+      
+      this.isCreatingCharts = true
+      
+      try {
+        const zone = this.activeZone
+        const data = this.zoneData[zone]
+        
+        if (!data || !data.has_data) {
+          console.log(`No data available for zone ${zone}`)
+          return
+        }
 
-      // Gráficos demográficos (si hay datos disponibles)
-      if (this.analysisData.demographic_analysis && this.analysisData.demographic_analysis.has_data) {
-        this.createGenderChart()
-        this.createAgeChart()
-        this.createGenderByZoneChart()
-        this.createAgeByZoneChart()
+        console.log(`Creating charts for zone ${zone} with data:`, data)
+        
+        // Gráfico de visitas reales
+        this.createVisitsChart(zone, data)
+        
+        // Gráfico de tiempo de permanencia (si hay datos disponibles)
+        if (data.dwell_time && data.dwell_time.distribution) {
+          this.createDwellChart(zone, data)
+        }
+
+        // Gráficos demográficos (si hay datos disponibles)
+        if (data.gender_distribution && data.gender_distribution.has_data) {
+          this.createGenderChartForZone(zone, data)
+        }
+        
+        if (data.age_distribution && data.age_distribution.has_data) {
+          this.createAgeChartForZone(zone, data)
+        }
+      } finally {
+        this.isCreatingCharts = false
+      }
+    },
+    
+    destroyZoneCharts(zone) {
+      // Destruir solo los gráficos de la zona específica
+      const chartKeys = [
+        `visitsChart_${zone}`,
+        `dwellChart_${zone}`,
+        `genderChart_${zone}`,
+        `ageChart_${zone}`
+      ]
+      
+      chartKeys.forEach(key => {
+        if (this.charts[key]) {
+          try {
+            this.charts[key].destroy()
+          } catch (e) {
+            console.warn(`Error destroying chart ${key}:`, e)
+          }
+          delete this.charts[key]
+        }
+      })
+    },
+    
+    destroyAllCurrentCharts() {
+      // Destruir todos los gráficos que puedan estar en los canvas actuales
+      // Buscar por todas las zonas posibles
+      for (let zone = 0; zone <= 3; zone++) {
+        this.destroyZoneCharts(zone)
+      }
+    },
+    
+    destroyCanvasCharts() {
+      // Destruir solo los gráficos actualmente en los canvas usando Chart.js API
+      if (this.visitsChartRef) {
+        const chart = Chart.getChart(this.visitsChartRef)
+        if (chart) chart.destroy()
+      }
+      if (this.dwellChartRef) {
+        const chart = Chart.getChart(this.dwellChartRef)
+        if (chart) chart.destroy()
+      }
+      if (this.genderChartRef) {
+        const chart = Chart.getChart(this.genderChartRef)
+        if (chart) chart.destroy()
+      }
+      if (this.ageChartRef) {
+        const chart = Chart.getChart(this.ageChartRef)
+        if (chart) chart.destroy()
       }
     },
 
-    createZoneChart() {
-      const ctx = this.$refs.zoneChart
-      console.log('Zone chart context:', ctx)
+    createVisitsChart(zone, data) {
+      const ctx = this.visitsChartRef
       
       if (!ctx) {
-        console.error('Zone chart canvas not found')
+        console.error(`Visits chart canvas not found for zone ${zone}`)
         return
       }
-
-      const zoneData = this.analysisData.zone_analysis
-      console.log('Zone data:', zoneData)
-      
-      if (!zoneData || Object.keys(zoneData).length === 0) {
-        console.error('No zone data available')
-        return
-      }
-      
-      const labels = Object.keys(zoneData).map(zone => this.formatZoneName(zone))
-      const data = Object.values(zoneData).map(zone => zone.total_entries)
-      
-      console.log('Chart labels:', labels)
-      console.log('Chart data:', data)
 
       try {
-        this.charts.zoneChart = new Chart(ctx, {
-          type: 'doughnut',
+        const chartKey = `visitsChart_${zone}`
+        
+        // Obtener instancia de Chart.js asociada al canvas si existe y destruirla
+        const existingChart = Chart.getChart(ctx)
+        if (existingChart) {
+          existingChart.destroy()
+        }
+        
+        this.charts[chartKey] = new Chart(ctx, {
+          type: 'bar',
           data: {
-            labels: labels,
+            labels: ['Visitas Reales', 'Personas Únicas'],
             datasets: [{
-              data: data,
-              backgroundColor: [
-                '#FF6384',
-                '#36A2EB', 
-                '#FFCE56',
-                '#4BC0C0',
-                '#9966FF',
-                '#FF9966'
+              label: 'Cantidad',
+              data: [
+                data.real_visits.total_real_visits,
+                data.real_visits.unique_persons
               ],
-              borderWidth: 2,
-              borderColor: '#ffffff'
+              backgroundColor: [
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(75, 192, 192, 0.8)'
+              ],
+              borderColor: [
+                'rgba(54, 162, 235, 1)',
+                'rgba(75, 192, 192, 1)'
+              ],
+              borderWidth: 2
             }]
           },
           options: {
@@ -436,116 +482,59 @@ export default {
             maintainAspectRatio: false,
             plugins: {
               legend: {
-                position: 'bottom'
+                display: false
               }
-            }
-          }
-        })
-        console.log('Zone chart created successfully')
-      } catch (error) {
-        console.error('Error creating zone chart:', error)
-      }
-    },
-
-    createTimelineChart() {
-      const ctx = this.$refs.timelineChart
-      console.log('Timeline chart context:', ctx)
-      
-      if (!ctx) {
-        console.error('Timeline chart canvas not found')
-        return
-      }
-
-      const timelineData = this.analysisData.temporal_analysis.timeline
-      console.log('Timeline data:', timelineData)
-      
-      if (!timelineData || Object.keys(timelineData).length === 0) {
-        console.error('No timeline data available')
-        return
-      }
-      
-      const timestamps = Object.keys(timelineData).map(t => parseFloat(t))
-      const detections = Object.values(timelineData).map(d => d.detections_per_second)
-      
-      console.log('Timeline timestamps:', timestamps.slice(0, 5))
-      console.log('Timeline detections:', detections.slice(0, 5))
-
-      try {
-        this.charts.timelineChart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: timestamps,
-            datasets: [{
-              label: 'Detecciones por segundo',
-              data: detections,
-              borderColor: '#36A2EB',
-              backgroundColor: 'rgba(54, 162, 235, 0.1)',
-              fill: true,
-              tension: 0.4
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            },
             scales: {
-              x: {
-                title: {
-                  display: true,
-                  text: 'Tiempo (segundos)'
-                }
-              },
               y: {
+                beginAtZero: true,
                 title: {
                   display: true,
-                  text: 'Detecciones'
-                },
-                beginAtZero: true
+                  text: 'Cantidad'
+                }
               }
             }
           }
         })
-        console.log('Timeline chart created successfully')
+        console.log(`Visits chart created successfully for zone ${zone}`)
       } catch (error) {
-        console.error('Error creating timeline chart:', error)
+        console.error(`Error creating visits chart for zone ${zone}:`, error)
       }
     },
 
-    createDwellDistributionChart() {
-      const ctx = this.$refs.dwellDistributionChart
-      console.log('Dwell distribution chart context:', ctx)
+    createDwellChart(zone, data) {
+      const ctx = this.dwellChartRef
       
       if (!ctx) {
-        console.error('Dwell distribution chart canvas not found')
+        console.error(`Dwell chart canvas not found for zone ${zone}`)
         return
+      }
+      
+      const chartKey = `dwellChart_${zone}`
+      
+      // Obtener instancia de Chart.js asociada al canvas si existe y destruirla
+      const existingChart = Chart.getChart(ctx)
+      if (existingChart) {
+        existingChart.destroy()
       }
 
-      const distribution = this.analysisData.dwell_time_analysis.summary.distribution
-      console.log('Dwell distribution data:', distribution)
-      
-      if (!distribution) {
-        console.error('No dwell distribution data available')
-        return
-      }
-      
+      const distribution = data.dwell_time.distribution
       const labels = ['< 10s', '10-30s', '30-60s', '> 60s']
-      const data = [
+      const chartData = [
         distribution.under_10s || 0,
         distribution['10_30s'] || 0,
         distribution['30_60s'] || 0,
         distribution.over_60s || 0
       ]
-      
-      console.log('Distribution labels:', labels)
-      console.log('Distribution data:', data)
 
       try {
-        this.charts.dwellDistributionChart = new Chart(ctx, {
+        this.charts[chartKey] = new Chart(ctx, {
           type: 'bar',
           data: {
             labels: labels,
             datasets: [{
               label: 'Número de visitas',
-              data: data,
+              data: chartData,
               backgroundColor: [
                 'rgba(255, 99, 132, 0.8)',
                 'rgba(255, 206, 86, 0.8)',
@@ -581,142 +570,53 @@ export default {
             }
           }
         })
-        console.log('Dwell distribution chart created successfully')
+        console.log(`Dwell chart created successfully for zone ${zone}`)
       } catch (error) {
-        console.error('Error creating dwell distribution chart:', error)
+        console.error(`Error creating dwell chart for zone ${zone}:`, error)
       }
     },
 
-    createDwellByZoneChart() {
-      const ctx = this.$refs.dwellByZoneChart
-      console.log('Dwell by zone chart context:', ctx)
+    createGenderChartForZone(zone, data) {
+      const ctx = this.genderChartRef
       
       if (!ctx) {
-        console.error('Dwell by zone chart canvas not found')
-        return
-      }
-
-      const zoneData = this.analysisData.dwell_time_analysis.by_zone
-      console.log('Dwell by zone data:', zoneData)
-      
-      if (!zoneData || Object.keys(zoneData).length === 0) {
-        console.error('No dwell by zone data available')
+        console.error(`Gender chart canvas not found for zone ${zone}`)
         return
       }
       
-      const labels = []
-      const avgTimes = []
-      const visitCounts = []
+      const chartKey = `genderChart_${zone}`
       
-      for (const [zoneName, data] of Object.entries(zoneData)) {
-        if (typeof data === 'object' && data.average_dwell_time) {
-          labels.push(this.formatZoneName(zoneName))
-          avgTimes.push(data.average_dwell_time)
-          visitCounts.push(data.total_visits)
-        }
-      }
-      
-      console.log('Dwell by zone labels:', labels)
-      console.log('Dwell by zone avg times:', avgTimes)
-
-      try {
-        this.charts.dwellByZoneChart = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: labels,
-            datasets: [{
-              label: 'Tiempo promedio (segundos)',
-              data: avgTimes,
-              backgroundColor: 'rgba(54, 162, 235, 0.8)',
-              borderColor: 'rgba(54, 162, 235, 1)',
-              borderWidth: 1,
-              yAxisID: 'y'
-            }, {
-              label: 'Número de visitas',
-              data: visitCounts,
-              backgroundColor: 'rgba(255, 99, 132, 0.8)',
-              borderColor: 'rgba(255, 99, 132, 1)',
-              borderWidth: 1,
-              yAxisID: 'y1',
-              type: 'line'
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              y: {
-                type: 'linear',
-                display: true,
-                position: 'left',
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Tiempo promedio (segundos)'
-                }
-              },
-              y1: {
-                type: 'linear',
-                display: true,
-                position: 'right',
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Número de visitas'
-                },
-                grid: {
-                  drawOnChartArea: false,
-                }
-              },
-              x: {
-                title: {
-                  display: true,
-                  text: 'Zonas'
-                }
-              }
-            }
-          }
-        })
-        console.log('Dwell by zone chart created successfully')
-      } catch (error) {
-        console.error('Error creating dwell by zone chart:', error)
-      }
-    },
-
-    createGenderChart() {
-      const ctx = this.$refs.genderChart
-      
-      if (!ctx) {
-        console.error('Gender chart canvas not found')
-        return
+      // Obtener instancia de Chart.js asociada al canvas si existe y destruirla
+      const existingChart = Chart.getChart(ctx)
+      if (existingChart) {
+        existingChart.destroy()
       }
 
-      const genderData = this.analysisData.demographic_analysis.gender_distribution
-      console.log('Gender data:', genderData)
+      const genderData = data.gender_distribution
       
       if (!genderData || !genderData.counts) {
-        console.error('No gender data available')
+        console.error(`No gender data available for zone ${zone}`)
         return
       }
 
       const labels = []
-      const data = []
+      const chartData = []
       const colors = []
       
       for (const [gender, count] of Object.entries(genderData.counts)) {
         labels.push(gender === 'M' ? '♂ Masculino' : '♀ Femenino')
-        data.push(count)
+        chartData.push(count)
         colors.push(gender === 'M' ? 'rgba(54, 162, 235, 0.8)' : 'rgba(255, 99, 132, 0.8)')
       }
 
       try {
-        this.charts.genderChart = new Chart(ctx, {
+        this.charts[chartKey] = new Chart(ctx, {
           type: 'doughnut',
           data: {
             labels: labels,
             datasets: [{
               label: 'Personas',
-              data: data,
+              data: chartData,
               backgroundColor: colors,
               borderColor: colors.map(c => c.replace('0.8', '1')),
               borderWidth: 2
@@ -743,55 +643,61 @@ export default {
             }
           }
         })
-        console.log('Gender chart created successfully')
+        console.log(`Gender chart created successfully for zone ${zone}`)
       } catch (error) {
-        console.error('Error creating gender chart:', error)
+        console.error(`Error creating gender chart for zone ${zone}:`, error)
       }
     },
 
-    createAgeChart() {
-      const ctx = this.$refs.ageChart
+    createAgeChartForZone(zone, data) {
+      const ctx = this.ageChartRef
       
       if (!ctx) {
-        console.error('Age chart canvas not found')
+        console.error(`Age chart canvas not found for zone ${zone}`)
         return
       }
+      
+      const chartKey = `ageChart_${zone}`
+      
+      // Obtener instancia de Chart.js asociada al canvas si existe y destruirla
+      const existingChart = Chart.getChart(ctx)
+      if (existingChart) {
+        existingChart.destroy()
+      }
 
-      const ageData = this.analysisData.demographic_analysis.age_distribution
-      console.log('Age data:', ageData)
+      const ageData = data.age_distribution
       
       if (!ageData || !ageData.counts) {
-        console.error('No age data available')
+        console.error(`No age data available for zone ${zone}`)
         return
       }
 
       // Ordenar rangos de edad de menor a mayor
-      const ageOrder = ['0-18', '19-35', '36-60', '60+', 'Desconocido']
+      const ageOrder = ['0-18', '19-35', '36-60', '60+']
       const labels = []
-      const data = []
+      const chartData = []
       const colors = [
         'rgba(75, 192, 192, 0.8)',
         'rgba(54, 162, 235, 0.8)',
         'rgba(153, 102, 255, 0.8)',
-        'rgba(255, 159, 64, 0.8)',
-        'rgba(201, 203, 207, 0.8)'
+        'rgba(255, 159, 64, 0.8)'
       ]
 
       ageOrder.forEach((age, index) => {
         if (ageData.counts[age]) {
           labels.push(this.formatAgeRange(age))
-          data.push(ageData.counts[age])
+          chartData.push(ageData.counts[age])
         }
       })
 
       try {
-        this.charts.ageChart = new Chart(ctx, {
+        this.charts[chartKey] = new Chart(ctx, {
           type: 'bar',
           data: {
             labels: labels,
             datasets: [{
               label: 'Personas',
-              data: data,
+              data: chartData,
               backgroundColor: colors.slice(0, labels.length),
               borderColor: colors.slice(0, labels.length).map(c => c.replace('0.8', '1')),
               borderWidth: 2
@@ -812,13 +718,13 @@ export default {
                     // Buscar el percentage correspondiente
                     let percentage = 0
                     for (const [key, val] of Object.entries(ageData.counts)) {
-                      if (age.includes(key) || age.includes(this.formatAgeRange(key))) {
+                      if (age.includes(key)) {
                         percentage = ageData.percentages[key]
                         break
                       }
                     }
                     return `${age}: ${value} personas (${percentage}%)`
-                  }.bind(this)
+                  }
                 }
               }
             },
@@ -839,173 +745,22 @@ export default {
             }
           }
         })
-        console.log('Age chart created successfully')
+        console.log(`Age chart created successfully for zone ${zone}`)
       } catch (error) {
-        console.error('Error creating age chart:', error)
-      }
-    },
-
-    createGenderByZoneChart() {
-      const ctx = this.$refs.genderByZoneChart
-      
-      if (!ctx) {
-        console.error('Gender by zone chart canvas not found')
-        return
-      }
-
-      const genderByZone = this.analysisData.demographic_analysis.gender_by_zone
-      console.log('Gender by zone data:', genderByZone)
-      
-      if (!genderByZone || Object.keys(genderByZone).length === 0) {
-        console.error('No gender by zone data available')
-        return
-      }
-
-      const zones = Object.keys(genderByZone).sort()
-      const maleData = []
-      const femaleData = []
-
-      zones.forEach(zone => {
-        const counts = genderByZone[zone].counts
-        maleData.push(counts['M'] || 0)
-        femaleData.push(counts['F'] || 0)
-      })
-
-      try {
-        this.charts.genderByZoneChart = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: zones.map(z => this.formatZoneName(z)),
-            datasets: [{
-              label: '♂ Masculino',
-              data: maleData,
-              backgroundColor: 'rgba(54, 162, 235, 0.8)',
-              borderColor: 'rgba(54, 162, 235, 1)',
-              borderWidth: 2
-            }, {
-              label: '♀ Femenino',
-              data: femaleData,
-              backgroundColor: 'rgba(255, 99, 132, 0.8)',
-              borderColor: 'rgba(255, 99, 132, 1)',
-              borderWidth: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top'
-              }
-            },
-            scales: {
-              y: {
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Número de Personas'
-                }
-              },
-              x: {
-                title: {
-                  display: true,
-                  text: 'Zonas'
-                }
-              }
-            }
-          }
-        })
-        console.log('Gender by zone chart created successfully')
-      } catch (error) {
-        console.error('Error creating gender by zone chart:', error)
-      }
-    },
-
-    createAgeByZoneChart() {
-      const ctx = this.$refs.ageByZoneChart
-      
-      if (!ctx) {
-        console.error('Age by zone chart canvas not found')
-        return
-      }
-
-      const ageByZone = this.analysisData.demographic_analysis.age_by_zone
-      console.log('Age by zone data:', ageByZone)
-      
-      if (!ageByZone || Object.keys(ageByZone).length === 0) {
-        console.error('No age by zone data available')
-        return
-      }
-
-      const zones = Object.keys(ageByZone).sort()
-      const ageRanges = ['0-18', '19-35', '36-60', '60+']
-      const colors = [
-        'rgba(75, 192, 192, 0.8)',
-        'rgba(54, 162, 235, 0.8)',
-        'rgba(153, 102, 255, 0.8)',
-        'rgba(255, 159, 64, 0.8)'
-      ]
-
-      const datasets = ageRanges.map((range, index) => {
-        const data = zones.map(zone => {
-          const counts = ageByZone[zone].counts
-          return counts[range] || 0
-        })
-
-        return {
-          label: this.formatAgeRange(range),
-          data: data,
-          backgroundColor: colors[index],
-          borderColor: colors[index].replace('0.8', '1'),
-          borderWidth: 2
-        }
-      })
-
-      try {
-        this.charts.ageByZoneChart = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: zones.map(z => this.formatZoneName(z)),
-            datasets: datasets
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top'
-              }
-            },
-            scales: {
-              y: {
-                stacked: true,
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Número de Personas'
-                }
-              },
-              x: {
-                stacked: true,
-                title: {
-                  display: true,
-                  text: 'Zonas'
-                }
-              }
-            }
-          }
-        })
-        console.log('Age by zone chart created successfully')
-      } catch (error) {
-        console.error('Error creating age by zone chart:', error)
+        console.error(`Error creating age chart for zone ${zone}:`, error)
       }
     },
 
     destroyCharts() {
+      // Destruir todos los gráficos de todas las zonas
       Object.values(this.charts).forEach(chart => {
-        if (chart) chart.destroy()
+        if (chart) {
+          try {
+            chart.destroy()
+          } catch (e) {
+            console.warn('Error destroying chart:', e)
+          }
+        }
       })
       this.charts = {}
     },
@@ -1042,6 +797,11 @@ export default {
   },
 
   beforeUnmount() {
+    // Cancelar timeouts pendientes
+    if (this.chartCreationTimeout) {
+      clearTimeout(this.chartCreationTimeout)
+    }
+    // Destruir todos los gráficos
     this.destroyCharts()
   }
 }
@@ -1608,5 +1368,103 @@ export default {
   padding: 80px;
   color: #666;
   font-size: 1.2em;
+}
+
+/* Estilos para el sistema de pestañas */
+.tabs-container {
+  margin-bottom: 30px;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.tab-button {
+  padding: 15px 30px;
+  border: 2px solid #ddd;
+  background: white;
+  color: #666;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  transition: all 0.3s;
+}
+
+.tab-button:hover {
+  background: #f8f9fa;
+  border-color: #007bff;
+  color: #007bff;
+}
+
+.tab-button.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.zone-content {
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.zone-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+@media (max-width: 768px) {
+  .zone-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.zone-details-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 25px;
+  margin-top: 30px;
+}
+
+@media (max-width: 768px) {
+  .zone-details-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.no-data-zone {
+  text-align: center;
+  padding: 60px;
+  color: #666;
+  font-size: 1.2em;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 </style>

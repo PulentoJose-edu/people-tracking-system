@@ -363,3 +363,74 @@ async def compare_tasks(task_ids: str):
         raise HTTPException(status_code=404, detail="No valid tasks found for comparison")
     
     return JSONResponse(content=comparison_data)
+
+@app.options("/analytics/zone/{task_id}/{zone_id}")
+async def options_zone_analytics(task_id: str, zone_id: int):
+    """
+    Handle CORS preflight requests for zone analytics endpoint
+    """
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
+
+@app.get("/analytics/zone/{task_id}/{zone_id}")
+async def get_zone_analytics(task_id: str, zone_id: int):
+    """
+    Obtiene análisis específicos para una zona particular de una tarea
+    Incluye: visitas reales, tiempo de permanencia, distribución de género y edad
+    """
+    try:
+        csv_path = os.path.join(OUTPUT_DIR, f"{task_id}_data.csv")
+        
+        if not os.path.exists(csv_path):
+            return JSONResponse(
+                content={"error": "CSV file not found for this task"},
+                status_code=404,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                }
+            )
+        
+        # Obtener análisis específico de la zona
+        zone_analysis = analytics_processor.get_zone_specific_analytics(csv_path, zone_id)
+        
+        if "error" in zone_analysis:
+            return JSONResponse(
+                content={"error": zone_analysis["error"]},
+                status_code=500,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                }
+            )
+        
+        return JSONResponse(
+            content=zone_analysis,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+    
+    except Exception as e:
+        print(f"Error in get_zone_analytics: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )

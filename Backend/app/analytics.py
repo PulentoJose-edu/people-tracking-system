@@ -459,6 +459,175 @@ class AnalyticsProcessor:
         }
         
         return demographic_data
+    
+    def get_zone_specific_analytics(self, csv_path: str, zone_id: int) -> Dict:
+        """
+        Obtiene análisis específicos para una zona particular
+        Incluye: visitas reales, tiempo de permanencia, distribución de género y edad
+        """
+        try:
+            df = pd.read_csv(csv_path)
+            
+            if df.empty:
+                return {"error": "CSV file is empty"}
+            
+            # Filtrar datos solo para la zona especificada
+            zone_df = df[df['zone_id'] == zone_id].copy()
+            
+            if zone_df.empty:
+                return {
+                    "zone_id": zone_id,
+                    "has_data": False,
+                    "message": f"No hay datos disponibles para la zona {zone_id}"
+                }
+            
+            zone_analysis = {
+                "zone_id": zone_id,
+                "has_data": True,
+                "real_visits": self._calculate_real_visits_for_zone(zone_df),
+                "dwell_time": self._calculate_dwell_time_for_zone(zone_df),
+                "gender_distribution": self._calculate_gender_for_zone(zone_df),
+                "age_distribution": self._calculate_age_for_zone(zone_df)
+            }
+            
+            return zone_analysis
+            
+        except Exception as e:
+            return {"error": f"Error processing zone analytics: {str(e)}"}
+    
+    def _calculate_real_visits_for_zone(self, zone_df: pd.DataFrame) -> Dict:
+        """
+        Calcula las visitas reales a la zona (entradas únicas)
+        """
+        # Contar eventos de entrada en la zona
+        entry_events = zone_df[zone_df['event'] == 'entry']
+        unique_persons = zone_df['person_tracker_id'].nunique()
+        total_entries = len(entry_events)
+        
+        # Calcular visitas por persona
+        visits_by_person = entry_events['person_tracker_id'].value_counts().to_dict()
+        
+        return {
+            "total_real_visits": total_entries,
+            "unique_persons": unique_persons,
+            "average_visits_per_person": total_entries / unique_persons if unique_persons > 0 else 0,
+            "visits_by_person": visits_by_person,
+            "max_visits_by_one_person": max(visits_by_person.values()) if visits_by_person else 0
+        }
+    
+    def _calculate_dwell_time_for_zone(self, zone_df: pd.DataFrame) -> Dict:
+        """
+        Calcula el tiempo de permanencia en la zona
+        """
+        dwell_times = []
+        
+        # Verificar si hay eventos de salida
+        has_exits = 'exit' in zone_df['event'].values if 'event' in zone_df.columns else False
+        
+        if has_exits:
+            # Procesar cada persona en esta zona
+            for person_id in zone_df['person_tracker_id'].unique():
+                person_data = zone_df[zone_df['person_tracker_id'] == person_id].sort_values('timestamp_seconds')
+                
+                # Buscar pares entry-exit
+                entry_times = person_data[person_data['event'] == 'entry']['timestamp_seconds'].tolist()
+                exit_times = person_data[person_data['event'] == 'exit']['timestamp_seconds'].tolist()
+                
+                for entry_time in entry_times:
+                    matching_exits = [exit_time for exit_time in exit_times if exit_time > entry_time]
+                    if matching_exits:
+                        exit_time = min(matching_exits)
+                        dwell_time = exit_time - entry_time
+                        dwell_times.append(dwell_time)
+                        exit_times.remove(exit_time)
+        else:
+            # Método de respaldo usando primera-última detección
+            for person_id in zone_df['person_tracker_id'].unique():
+                person_data = zone_df[zone_df['person_tracker_id'] == person_id]
+                if len(person_data) > 1:
+                    dwell_time = person_data['timestamp_seconds'].max() - person_data['timestamp_seconds'].min()
+                    dwell_times.append(dwell_time)
+        
+        if dwell_times:
+            return {
+                "average_dwell_time": float(np.mean(dwell_times)),
+                "median_dwell_time": float(np.median(dwell_times)),
+                "max_dwell_time": float(max(dwell_times)),
+                "min_dwell_time": float(min(dwell_times)),
+                "total_visits_measured": len(dwell_times),
+                "std_dwell_time": float(np.std(dwell_times)),
+                "distribution": {
+                    "under_10s": len([t for t in dwell_times if t < 10]),
+                    "10_30s": len([t for t in dwell_times if 10 <= t < 30]),
+                    "30_60s": len([t for t in dwell_times if 30 <= t < 60]),
+                    "over_60s": len([t for t in dwell_times if t >= 60])
+                }
+            }
+        else:
+            return {
+                "message": "No se pudieron calcular tiempos de permanencia",
+                "total_visits_measured": 0
+            }
+    
+    def _calculate_gender_for_zone(self, zone_df: pd.DataFrame) -> Dict:
+        """
+        Calcula la distribución de género en la zona
+        """
+        if 'gender' not in zone_df.columns:
+            return {"has_data": False, "message": "No hay datos de género disponibles"}
+        
+        # Filtrar solo personas con género válido (no Desconocido)
+        valid_gender_df = zone_df[zone_df['gender'] != 'Desconocido'].copy()
+        
+        if valid_gender_df.empty:
+            return {"has_data": False, "message": "No hay datos de género válidos"}
+        
+        # Usar solo una entrada por persona
+        unique_persons_df = valid_gender_df.drop_duplicates(subset=['person_tracker_id'])
+        
+        gender_counts = unique_persons_df['gender'].value_counts().to_dict()
+        total_persons = len(unique_persons_df)
+        
+        return {
+            "has_data": True,
+            "counts": gender_counts,
+            "percentages": {
+                gender: round((count / total_persons) * 100, 2)
+                for gender, count in gender_counts.items()
+            },
+            "total_classified": total_persons,
+            "most_common": max(gender_counts, key=gender_counts.get) if gender_counts else "N/A"
+        }
+    
+    def _calculate_age_for_zone(self, zone_df: pd.DataFrame) -> Dict:
+        """
+        Calcula la distribución de edad en la zona
+        """
+        if 'age' not in zone_df.columns:
+            return {"has_data": False, "message": "No hay datos de edad disponibles"}
+        
+        # Filtrar solo personas con edad válida (no Desconocido)
+        valid_age_df = zone_df[zone_df['age'] != 'Desconocido'].copy()
+        
+        if valid_age_df.empty:
+            return {"has_data": False, "message": "No hay datos de edad válidos"}
+        
+        # Usar solo una entrada por persona
+        unique_persons_df = valid_age_df.drop_duplicates(subset=['person_tracker_id'])
+        
+        age_counts = unique_persons_df['age'].value_counts().to_dict()
+        total_persons = len(unique_persons_df)
+        
+        return {
+            "has_data": True,
+            "counts": age_counts,
+            "percentages": {
+                age: round((count / total_persons) * 100, 2)
+                for age, count in age_counts.items()
+            },
+            "total_classified": total_persons,
+            "most_common": max(age_counts, key=age_counts.get) if age_counts else "N/A"
+        }
 
 # Instancia global del procesador
 analytics_processor = AnalyticsProcessor()
