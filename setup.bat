@@ -33,6 +33,16 @@ if not exist .venv (
 echo [4/6] Instalando dependencias del Backend...
 .venv\Scripts\pip install -r Backend\requirements.txt
 
+echo [4.5/6] Verificando soporte GPU...
+nvidia-smi >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [GPU] Tarjeta NVIDIA detectada. Instalando PyTorch con soporte CUDA...
+    .venv\Scripts\pip uninstall -y torch torchvision torchaudio
+    .venv\Scripts\pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+) else (
+    echo [GPU] No se detecto tarjeta NVIDIA o drivers. Se usara procesamiento por CPU.
+)
+
 echo [5/6] Instalando dependencias del Frontend...
 cd frontend
 call npm install

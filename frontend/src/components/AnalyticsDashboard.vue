@@ -672,23 +672,85 @@ export default {
         return
       }
 
-      // Ordenar rangos de edad de menor a mayor
-      const ageOrder = ['0-18', '19-35', '36-60', '60+']
+      // Definir mapeos de etiquetas para diferentes modelos
+      const labelMappings = {
+        // NTQAI Labels (Raw)
+        'AgeLess15': '0-15 años',
+        'Age16-30': '16-30 años',
+        'Age31-45': '31-45 años',
+        'Age46-60': '46-60 años',
+        'AgeAbove60': '60+ años',
+        
+        // NTQAI Labels (Mapped in Backend)
+        '0-15': '0-15 años',
+        '16-30': '16-30 años',
+        '31-45': '31-45 años',
+        '46-60': '46-60 años',
+        '60+': '60+ años',
+        
+        // PAR Labels
+        'Niño': 'Niño (0-12)',
+        'Adolescente': 'Adolescente (13-19)',
+        'Adulto Joven': 'Joven (20-35)',
+        'Adulto': 'Adulto (36-60)',
+        'Mayor': 'Mayor (60+)',
+        
+        // Legacy Labels
+        '0-18': '0-15 años',
+        '19-30': '16-30 años',
+        '19-35': '16-30 años',
+        '36-60': '36-60 años'
+      }
+
+      // Orden preferido para cada set de etiquetas
+      const sortOrders = {
+        ntqai_raw: ['AgeLess15', 'Age16-30', 'Age31-45', 'Age46-60', 'AgeAbove60'],
+        ntqai_mapped: ['0-15', '16-30', '31-45', '46-60', '60+'],
+        par: ['Niño', 'Adolescente', 'Adulto Joven', 'Adulto', 'Mayor'],
+        legacy: ['0-18', '19-30', '19-35', '36-60', '60+']
+      }
+
+      // Detectar qué tipo de etiquetas estamos usando
+      const availableKeys = Object.keys(ageData.counts)
+      let currentOrder = availableKeys // Default: orden como venga
+      
+      if (availableKeys.some(k => k.startsWith('Age'))) {
+        currentOrder = sortOrders.ntqai_raw
+      } else if (availableKeys.includes('0-15')) {
+        currentOrder = sortOrders.ntqai_mapped
+      } else if (availableKeys.includes('Niño')) {
+        currentOrder = sortOrders.par
+      } else if (availableKeys.includes('0-18') || availableKeys.includes('19-30')) {
+        currentOrder = sortOrders.legacy
+      }
+
       const labels = []
       const chartData = []
+      
+      // Construir datos ordenados
+      currentOrder.forEach(key => {
+        if (ageData.counts[key] !== undefined) {
+          labels.push(labelMappings[key] || key)
+          chartData.push(ageData.counts[key])
+        }
+      })
+      
+      // Agregar cualquier otra etiqueta que no esté en el orden predefinido
+      availableKeys.forEach(key => {
+        if (!currentOrder.includes(key)) {
+          labels.push(labelMappings[key] || key)
+          chartData.push(ageData.counts[key])
+        }
+      })
+
       const colors = [
         'rgba(75, 192, 192, 0.8)',
         'rgba(54, 162, 235, 0.8)',
         'rgba(153, 102, 255, 0.8)',
-        'rgba(255, 159, 64, 0.8)'
+        'rgba(255, 159, 64, 0.8)',
+        'rgba(255, 99, 132, 0.8)',
+        'rgba(255, 205, 86, 0.8)'
       ]
-
-      ageOrder.forEach((age, index) => {
-        if (ageData.counts[age]) {
-          labels.push(this.formatAgeRange(age))
-          chartData.push(ageData.counts[age])
-        }
-      })
 
       try {
         this.charts[chartKey] = new Chart(ctx, {
@@ -714,16 +776,7 @@ export default {
                 callbacks: {
                   label: function(context) {
                     const value = context.parsed.y
-                    const age = context.label
-                    // Buscar el percentage correspondiente
-                    let percentage = 0
-                    for (const [key, val] of Object.entries(ageData.counts)) {
-                      if (age.includes(key)) {
-                        percentage = ageData.percentages[key]
-                        break
-                      }
-                    }
-                    return `${age}: ${value} personas (${percentage}%)`
+                    return `Cantidad: ${value}`
                   }
                 }
               }
@@ -786,10 +839,16 @@ export default {
 
     formatAgeRange(age) {
       const ageLabels = {
-        '0-18': '0-18 años',
-        '19-35': '19-35 años',
-        '36-60': '36-60 años',
+        '0-15': '0-15 años',
+        '16-30': '16-30 años',
+        '31-45': '31-45 años',
+        '46-60': '46-60 años',
         '60+': '60+ años',
+        // Legacy mappings
+        '0-18': '0-15 años', // Remapeo para datos antiguos
+        '19-30': '16-30 años', // Remapeo para datos antiguos
+        '19-35': '16-30 años', // Remapeo para datos antiguos
+        '36-60': '36-60 años',
         'Desconocido': 'Desconocido'
       }
       return ageLabels[age] || age
