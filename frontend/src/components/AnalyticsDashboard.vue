@@ -25,6 +25,42 @@
     </div>
 
     <div v-else-if="selectedTaskId" class="dashboard-content">
+      <!-- Calculadora ROI y Configuración -->
+      <div class="roi-config-section card">
+        <div class="roi-header">
+          <h3>💰 Calculadora de ROI y Proyección</h3>
+          <div v-if="globalData" class="roi-global-results">
+            <div class="roi-metric-pill">
+              <span class="label">Tráfico Mensual Est. (Global):</span>
+              <span class="value">{{ formatNumber(globalProjectedTraffic) }}</span>
+            </div>
+            <div class="roi-metric-pill highlight">
+              <span class="label">CPM Global Est.:</span>
+              <span class="value">{{ formatCurrency(globalCPM) }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="roi-inputs-grid">
+          <div class="input-group">
+            <label>Costo Campaña ($ CLP)</label>
+            <input type="number" v-model.number="roiConfig.campaignCost" min="0" placeholder="100000">
+          </div>
+          <div class="input-group">
+            <label>Duración Muestra (min)</label>
+            <input type="number" v-model.number="roiConfig.sampleDurationMinutes" min="1" placeholder="10">
+          </div>
+          <div class="input-group">
+            <label>Horas Activas/Día</label>
+            <input type="number" v-model.number="roiConfig.dailyActiveHours" min="1" max="24" placeholder="12">
+          </div>
+          <div class="input-group">
+            <label>Días Proyección</label>
+            <input type="number" v-model.number="roiConfig.campaignDays" min="1" placeholder="30">
+          </div>
+        </div>
+      </div>
+
       <!-- Sistema de Pestañas -->
       <div class="tabs-container">
         <div class="tabs">
@@ -117,6 +153,29 @@
 
         <!-- Información detallada de la zona -->
         <div class="zone-details-section">
+          <!-- Nueva sección de ROI por Zona -->
+          <div class="info-section roi-zone-card">
+            <h3>💰 Proyección y ROI - Zona {{ activeZone }}</h3>
+            <div class="stats-grid">
+              <div class="metric-item">
+                <span class="metric-label">Tráfico Mensual Est.:</span>
+                <span class="metric-value">{{ formatNumber(zoneProjectedTraffic) }}</span>
+              </div>
+              <div class="metric-item highlight">
+                <span class="metric-label">CPM Zona Est.:</span>
+                <span class="metric-value">{{ formatCurrency(zoneCPM) }}</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Tasa por Minuto:</span>
+                <span class="metric-value">{{ zoneRatePerMinute.toFixed(2) }} pers/min</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Proyección Diaria:</span>
+                <span class="metric-value">{{ formatNumber(zoneDailyProjection) }} pers/día</span>
+              </div>
+            </div>
+          </div>
+
           <div class="info-section">
             <h3>📊 Estadísticas de Visitas - Zona {{ activeZone }}</h3>
             <div class="stats-grid">
@@ -231,7 +290,46 @@ export default {
       ageChartRef: null,
       // Control de timeouts para evitar solapamientos
       chartCreationTimeout: null,
-      isCreatingCharts: false
+      isCreatingCharts: false,
+      // Configuración ROI
+      roiConfig: {
+        campaignCost: 100000, // Valor por defecto más realista en CLP
+        sampleDurationMinutes: 10,
+        dailyActiveHours: 12,
+        campaignDays: 30
+      },
+      globalData: null
+    }
+  },
+  computed: {
+    // Cálculos Globales
+    globalProjectedTraffic() {
+      if (!this.globalData || !this.roiConfig.sampleDurationMinutes) return 0
+      const uniquePersons = this.globalData.summary.unique_persons || 0
+      const ratePerMinute = uniquePersons / this.roiConfig.sampleDurationMinutes
+      const dailyProjection = ratePerMinute * 60 * this.roiConfig.dailyActiveHours
+      return dailyProjection * this.roiConfig.campaignDays
+    },
+    globalCPM() {
+      if (!this.globalProjectedTraffic) return 0
+      return (this.roiConfig.campaignCost / this.globalProjectedTraffic) * 1000
+    },
+    
+    // Cálculos por Zona Activa
+    zoneRatePerMinute() {
+      const zoneData = this.zoneData[this.activeZone]
+      if (!zoneData || !zoneData.real_visits || !this.roiConfig.sampleDurationMinutes) return 0
+      return zoneData.real_visits.unique_persons / this.roiConfig.sampleDurationMinutes
+    },
+    zoneDailyProjection() {
+      return this.zoneRatePerMinute * 60 * this.roiConfig.dailyActiveHours
+    },
+    zoneProjectedTraffic() {
+      return this.zoneDailyProjection * this.roiConfig.campaignDays
+    },
+    zoneCPM() {
+      if (!this.zoneProjectedTraffic) return 0
+      return (this.roiConfig.campaignCost / this.zoneProjectedTraffic) * 1000
     }
   },
   mounted() {
@@ -264,6 +362,20 @@ export default {
       try {
         console.log('Loading data for task:', this.selectedTaskId)
         
+        // Cargar datos globales
+        try {
+          const globalResponse = await axios.get(`http://127.0.0.1:8000/analytics/analyze/${this.selectedTaskId}`)
+          this.globalData = globalResponse.data
+          
+          // Intentar estimar la duración de la muestra basada en los datos si es posible
+          if (this.globalData.summary && this.globalData.summary.duration_seconds) {
+            // Actualizar solo si es la primera carga o si el usuario no lo ha modificado manualmente (podríamos agregar lógica para eso, pero por ahora simple)
+            // Opcional: this.roiConfig.sampleDurationMinutes = Math.ceil(this.globalData.summary.duration_seconds / 60)
+          }
+        } catch (e) {
+          console.error('Error loading global data:', e)
+        }
+
         // Cargar datos para cada zona (0, 1, 2, 3)
         const zonePromises = [0, 1, 2, 3].map(zoneId => 
           axios.get(`http://127.0.0.1:8000/analytics/zone/${this.selectedTaskId}/${zoneId}`)
@@ -835,6 +947,23 @@ export default {
 
     formatTransition(transition) {
       return transition.replace(/_to_/g, ' → ').replace(/zone_/g, 'Zona ')
+    },
+
+    formatNumber(num) {
+      if (num === undefined || num === null) return '0'
+      // Usar formato chileno para números (puntos para miles)
+      return Math.round(num).toLocaleString('es-CL')
+    },
+    
+    formatCurrency(num) {
+      if (num === undefined || num === null) return '$0'
+      // Formato Peso Chileno (CLP): Signo $, puntos para miles, sin decimales
+      return new Intl.NumberFormat('es-CL', { 
+        style: 'currency', 
+        currency: 'CLP',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(num)
     },
 
     formatAgeRange(age) {
@@ -1525,5 +1654,110 @@ export default {
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Estilos para ROI y Proyección */
+.roi-config-section {
+  margin-bottom: 25px;
+  padding: 20px;
+  background: linear-gradient(to right, #f8f9fa, #ffffff);
+  border-left: 5px solid #4caf50;
+}
+
+.roi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.roi-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.2rem;
+}
+
+.roi-global-results {
+  display: flex;
+  gap: 15px;
+}
+
+.roi-metric-pill {
+  background: white;
+  padding: 8px 15px;
+  border-radius: 20px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.roi-metric-pill.highlight {
+  background: #e8f5e9;
+  border-color: #a5d6a7;
+  color: #2e7d32;
+}
+
+.roi-metric-pill .label {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.roi-metric-pill .value {
+  font-weight: bold;
+  font-size: 1rem;
+  color: #2c3e50;
+}
+
+.roi-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-group label {
+  font-size: 0.9rem;
+  color: #555;
+  font-weight: 500;
+}
+
+.input-group input {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.input-group input:focus {
+  border-color: #4caf50;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.roi-zone-card {
+  border-left: 4px solid #2196f3;
+  background: #f0f7ff;
+}
+
+.metric-item.highlight {
+  background: #e3f2fd;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #bbdefb;
+}
+
+.metric-item.highlight .metric-value {
+  color: #1565c0;
+  font-size: 1.4rem;
 }
 </style>
