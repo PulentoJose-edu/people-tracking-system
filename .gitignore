@@ -171,3 +171,8 @@ test_*.py
 *_test.py
 Backend/models/ntqai_age.bin
 Backend/models/ntqai_gender.bin
+
+# NTQAI model configuration files (auto-generated)
+Backend/models/ntqai_adapter.py
+Backend/models/ntqai_age_config.json
+Backend/models/ntqai_gender_config.json

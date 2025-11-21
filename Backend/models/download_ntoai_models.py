@@ -227,10 +227,10 @@ class NTQAIModelsAdapter:
     def _map_age_to_group(self, age_label):
         """Mapea las etiquetas de edad NTQAI a grupos estándar"""
         mapping = {
-            "AgeLess15": "0-18",
-            "Age16-30": "19-35",
-            "Age31-45": "36-60",
-            "Age46-60": "36-60",
+            "AgeLess15": "0-15",
+            "Age16-30": "16-30",
+            "Age31-45": "31-45",
+            "Age46-60": "46-60",
             "AgeAbove60": "60+"
         }
         return mapping.get(age_label, "Unknown")
@@ -304,7 +304,7 @@ class NTQAIModelsAdapter:
 # Función de compatibilidad con la interfaz anterior
 def create_ntqai_model():
     """Crea y carga los modelos NTQAI"""
-    adapter = NTOAIModelsAdapter()
+    adapter = NTQAIModelsAdapter()
     if adapter.load_models():
         return adapter
     return None

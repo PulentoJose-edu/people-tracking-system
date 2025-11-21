@@ -7,6 +7,7 @@ import time
 import os
 import warnings
 import sys
+import torch
 from pathlib import Path
 
 # Agregar path para imports de modelos
@@ -52,9 +53,14 @@ def get_par_model():
                 print("🔄 Cargando modelo PAR baseline...")
                 from models.attribute_recognition import get_par_model as _get_par
                 model_path = Path(__file__).parent.parent / 'models' / 'resnet50_peta.pth'
+                
+                # Detectar dispositivo automáticamente
+                device = 'cuda' if torch.cuda.is_available() else 'cpu'
+                print(f"🖥️  Usando dispositivo para PAR Baseline: {device.upper()}")
+                
                 _par_model = _get_par(
                     model_path=str(model_path) if model_path.exists() else None,
-                    device='cpu'  # Usar 'cuda' si tienes GPU disponible
+                    device=device
                 )
                 print("✅ Modelo PAR baseline cargado")
         except Exception as e:
@@ -85,8 +91,15 @@ def process_video_task(
         par_interval: Analizar atributos cada N frames (default: 15)
     """
     try:
+        # Detectar dispositivo disponible
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"🚀 Iniciando procesamiento en: {device.upper()}")
+
         # 1. Cargar modelo YOLO
         model = YOLO('yolov8s.pt')  # Small model - mejor balance precisión/velocidad que nano
+        # Mover explícitamente al dispositivo si es necesario, aunque YOLO suele auto-detectar
+        if device == 'cuda':
+            model.to('cuda')
         
         # 1b. Cargar modelo PAR si está habilitado
         par_model = None
