@@ -25,42 +25,6 @@
     </div>
 
     <div v-else-if="selectedTaskId" class="dashboard-content">
-      <!-- Calculadora ROI y Configuración -->
-      <div class="roi-config-section card">
-        <div class="roi-header">
-          <h3>💰 Calculadora de ROI y Proyección</h3>
-          <div v-if="globalData" class="roi-global-results">
-            <div class="roi-metric-pill">
-              <span class="label">Tráfico Mensual Est. (Global):</span>
-              <span class="value">{{ formatNumber(globalProjectedTraffic) }}</span>
-            </div>
-            <div class="roi-metric-pill highlight">
-              <span class="label">CPM Global Est.:</span>
-              <span class="value">{{ formatCurrency(globalCPM) }}</span>
-            </div>
-          </div>
-        </div>
-        
-        <div class="roi-inputs-grid">
-          <div class="input-group">
-            <label>Costo Campaña ($ CLP)</label>
-            <input type="number" v-model.number="roiConfig.campaignCost" min="0" placeholder="100000">
-          </div>
-          <div class="input-group">
-            <label>Duración Muestra (min)</label>
-            <input type="number" v-model.number="roiConfig.sampleDurationMinutes" min="1" placeholder="10">
-          </div>
-          <div class="input-group">
-            <label>Horas Activas/Día</label>
-            <input type="number" v-model.number="roiConfig.dailyActiveHours" min="1" max="24" placeholder="12">
-          </div>
-          <div class="input-group">
-            <label>Días Proyección</label>
-            <input type="number" v-model.number="roiConfig.campaignDays" min="1" placeholder="30">
-          </div>
-        </div>
-      </div>
-
       <!-- Sistema de Pestañas -->
       <div class="tabs-container">
         <div class="tabs">
@@ -69,6 +33,12 @@
             @click="selectZone('general')"
           >
             📊 General
+          </button>
+          <button 
+            :class="['tab-button', { active: activeZone === 'roi' }]"
+            @click="selectZone('roi')"
+          >
+            💰 Proyecciones
           </button>
           <button 
             v-for="zone in [0, 1, 2, 3]" 
@@ -81,8 +51,50 @@
         </div>
       </div>
 
+      <!-- Contenido Calculadora ROI -->
+      <div v-if="activeZone === 'roi'" class="zone-content">
+        <div class="roi-config-section card" style="max-width: 800px; margin: 0 auto;">
+          <div class="roi-header">
+            <h3>💰 Calculadora de CPM y Proyección</h3>
+            <div v-if="globalData" class="roi-global-results">
+              <div class="roi-metric-pill">
+                <span class="label">Tráfico Mensual Est. (Global):</span>
+                <span class="value">{{ formatNumber(globalProjectedTraffic) }}</span>
+              </div>
+              <div class="roi-metric-pill highlight">
+                <span class="label">CPM Global Est.:</span>
+                <span class="value">{{ formatCurrency(globalCPM) }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="roi-inputs-grid">
+            <div class="input-group">
+              <label>Costo Campaña ($ CLP)</label>
+              <input type="number" v-model.number="roiConfig.campaignCost" min="0" placeholder="100000">
+            </div>
+            <div class="input-group">
+              <label>Duración Muestra (min)</label>
+              <input type="number" v-model.number="roiConfig.sampleDurationMinutes" min="1" placeholder="10">
+            </div>
+            <div class="input-group">
+              <label>Horas Activas/Día</label>
+              <input type="number" v-model.number="roiConfig.dailyActiveHours" min="1" max="24" placeholder="12">
+            </div>
+            <div class="input-group">
+              <label>Días Proyección</label>
+              <input type="number" v-model.number="roiConfig.campaignDays" min="1" placeholder="30">
+            </div>
+          </div>
+          
+          <div class="roi-explanation" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 0.9em;">
+            <p>ℹ️ <strong>Nota:</strong> Los cambios realizados aquí actualizarán automáticamente las proyecciones de CPM en las pestañas de cada zona.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Contenido General -->
-      <div v-if="activeZone === 'general' && globalData" class="zone-content">
+      <div v-else-if="activeZone === 'general' && globalData" class="zone-content">
         <!-- Tarjetas de resumen general -->
         <div class="summary-cards">
           <div class="card">
@@ -249,7 +261,7 @@
         <div class="zone-details-section">
           <!-- Nueva sección de ROI por Zona -->
           <div class="info-section roi-zone-card">
-            <h3>💰 Proyección y ROI - Zona {{ activeZone }}</h3>
+            <h3>💰 Proyección y CPM - Zona {{ activeZone }}</h3>
             <div class="stats-grid">
               <div class="metric-item">
                 <span class="metric-label">Tráfico Mensual Est.:</span>
@@ -551,6 +563,10 @@ export default {
       
       if (this.activeZone === 'general') {
         this.createGeneralCharts()
+        return
+      }
+
+      if (this.activeZone === 'roi') {
         return
       }
       
