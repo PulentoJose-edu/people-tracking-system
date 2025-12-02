@@ -62,8 +62,16 @@ class AnalyticsProcessor:
         for zone_id in df['zone_id'].unique():
             zone_data = df[df['zone_id'] == zone_id]
             
+            # Calcular visitas reales (eventos de entrada) si existe la columna event
+            if 'event' in df.columns:
+                real_visits = len(zone_data[zone_data['event'] == 'entry'])
+            else:
+                # Fallback: usar total de detecciones si no hay eventos
+                real_visits = len(zone_data)
+
             zone_stats[f"zone_{zone_id}"] = {
-                "total_entries": len(zone_data),
+                "total_entries": real_visits, # Usar visitas reales en lugar de total de detecciones
+                "total_detections": len(zone_data), # Mantener el dato crudo por si acaso
                 "unique_persons": zone_data['person_tracker_id'].nunique(),
                 "first_detection": zone_data['timestamp_seconds'].min(),
                 "last_detection": zone_data['timestamp_seconds'].max(),

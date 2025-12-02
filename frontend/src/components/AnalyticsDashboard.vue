@@ -65,6 +65,12 @@
       <div class="tabs-container">
         <div class="tabs">
           <button 
+            :class="['tab-button', { active: activeZone === 'general' }]"
+            @click="selectZone('general')"
+          >
+            📊 General
+          </button>
+          <button 
             v-for="zone in [0, 1, 2, 3]" 
             :key="zone"
             :class="['tab-button', { active: activeZone === zone }]"
@@ -75,8 +81,96 @@
         </div>
       </div>
 
+      <!-- Contenido General -->
+      <div v-if="activeZone === 'general' && globalData" class="zone-content">
+        <!-- Tarjetas de resumen general -->
+        <div class="summary-cards">
+          <div class="card">
+            <div class="card-icon">👥</div>
+            <div class="card-content">
+              <h3>{{ globalData.summary.unique_persons }}</h3>
+              <p>Personas Únicas Totales</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon">⏱️</div>
+            <div class="card-content">
+              <h3>{{ (globalData.summary.duration_seconds / 60).toFixed(1) }}m</h3>
+              <p>Duración Análisis</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon">📍</div>
+            <div class="card-content">
+              <h3>{{ globalData.summary.zones_count }}</h3>
+              <p>Zonas Activas</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon">🔄</div>
+            <div class="card-content">
+              <h3>{{ globalData.flow_analysis.total_transitions }}</h3>
+              <p>Transiciones entre Zonas</p>
+            </div>
+          </div>
+          <div class="card demographic" v-if="globalData.demographic_analysis && globalData.demographic_analysis.summary">
+            <div class="card-icon">👤</div>
+            <div class="card-content">
+              <h3>{{ globalData.demographic_analysis.summary.most_common_gender === 'M' ? '♂️ Masculino' : (globalData.demographic_analysis.summary.most_common_gender === 'F' ? '♀️ Femenino' : 'N/A') }}</h3>
+              <p>Género Predominante</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gráficos Generales -->
+        <div class="charts-grid main-charts">
+          <!-- Distribución por Zonas -->
+          <div class="chart-container medium">
+            <h3>📍 Distribución de Visitas por Zona</h3>
+            <div class="chart-wrapper">
+              <canvas :ref="el => { if (el) generalZoneDistRef = el }"></canvas>
+            </div>
+          </div>
+
+          <!-- Comparación de Tiempos de Permanencia -->
+          <div class="chart-container medium">
+            <h3>⏳ Tiempo Promedio de Permanencia por Zona</h3>
+            <div class="chart-wrapper">
+              <canvas :ref="el => { if (el) generalDwellComparisonRef = el }"></canvas>
+            </div>
+          </div>
+          
+          <!-- Distribución de Género Global -->
+          <div class="chart-container medium">
+            <h3>👥 Distribución de Género Global</h3>
+            <div class="chart-wrapper">
+              <canvas :ref="el => { if (el) generalGenderRef = el }"></canvas>
+            </div>
+          </div>
+
+          <!-- Distribución de Edad Global -->
+          <div class="chart-container medium">
+            <h3>🎂 Distribución de Edad Global</h3>
+            <div class="chart-wrapper">
+              <canvas :ref="el => { if (el) generalAgeRef = el }"></canvas>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Información de Flujo -->
+        <div class="info-section" v-if="globalData.flow_analysis.most_common_transition">
+          <h3>🔄 Patrones de Flujo</h3>
+          <div class="stats-grid">
+             <div class="metric-item">
+                <span class="metric-label">Transición más común:</span>
+                <span class="metric-value">{{ formatTransition(globalData.flow_analysis.most_common_transition[0]) }} ({{ globalData.flow_analysis.most_common_transition[1] }} veces)</span>
+              </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Contenido de la Zona Activa -->
-      <div v-if="zoneData[activeZone]" class="zone-content">
+      <div v-else-if="zoneData[activeZone]" class="zone-content">
         <!-- Tarjetas de resumen para la zona -->
         <div class="summary-cards">
           <div class="card">
@@ -273,7 +367,7 @@ export default {
     return {
       selectedTaskId: '',
       availableTasks: [],
-      activeZone: 0,
+      activeZone: 'general', // Default to general view
       zoneData: {
         0: null,
         1: null,
@@ -288,6 +382,11 @@ export default {
       dwellChartRef: null,
       genderChartRef: null,
       ageChartRef: null,
+      // Referencias a los canvas generales
+      generalZoneDistRef: null,
+      generalDwellComparisonRef: null,
+      generalGenderRef: null,
+      generalAgeRef: null,
       // Control de timeouts para evitar solapamientos
       chartCreationTimeout: null,
       isCreatingCharts: false,
@@ -450,6 +549,11 @@ export default {
         return
       }
       
+      if (this.activeZone === 'general') {
+        this.createGeneralCharts()
+        return
+      }
+      
       const zone = this.activeZone
       const data = this.zoneData[zone]
       
@@ -462,6 +566,222 @@ export default {
       this.createZoneCharts()
     },
     
+    createGeneralCharts() {
+      if (this.isCreatingCharts || !this.globalData) return
+      
+      this.isCreatingCharts = true
+      
+      try {
+        console.log('Creating general charts with data:', this.globalData)
+        
+        this.createGeneralZoneDistChart()
+        this.createGeneralDwellTimeComparisonChart()
+        this.createGeneralGenderChart()
+        this.createGeneralAgeChart()
+      } catch (e) {
+        console.error('Error creating general charts:', e)
+      } finally {
+        this.isCreatingCharts = false
+      }
+    },
+
+    createGeneralZoneDistChart() {
+      const ctx = this.generalZoneDistRef
+      if (!ctx) return
+
+      const existingChart = Chart.getChart(ctx)
+      if (existingChart) existingChart.destroy()
+
+      const zoneStats = this.globalData.zone_analysis
+      const labels = []
+      const data = []
+      
+      Object.keys(zoneStats).forEach(key => {
+        labels.push(this.formatZoneName(key))
+        data.push(zoneStats[key].total_entries)
+      })
+
+      this.charts['generalZoneDist'] = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: [
+              'rgba(255, 99, 132, 0.8)',
+              'rgba(54, 162, 235, 0.8)',
+              'rgba(255, 206, 86, 0.8)',
+              'rgba(75, 192, 192, 0.8)'
+            ]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom' }
+          }
+        }
+      })
+    },
+
+    createGeneralDwellTimeComparisonChart() {
+      const ctx = this.generalDwellComparisonRef
+      if (!ctx) return
+
+      const existingChart = Chart.getChart(ctx)
+      if (existingChart) existingChart.destroy()
+
+      const dwellByZone = this.globalData.dwell_time_analysis.by_zone
+      const labels = []
+      const data = []
+      
+      // Ordenar por nombre de zona para consistencia
+      Object.keys(dwellByZone).sort().forEach(key => {
+        labels.push(this.formatZoneName(key))
+        data.push(dwellByZone[key].average_dwell_time)
+      })
+
+      this.charts['generalDwellComparison'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Tiempo Promedio (segundos)',
+            data: data,
+            backgroundColor: 'rgba(255, 159, 64, 0.8)',
+            borderColor: 'rgba(255, 159, 64, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Segundos' }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `Promedio: ${context.parsed.y.toFixed(1)}s`
+                }
+              }
+            }
+          }
+        }
+      })
+    },
+
+    createGeneralGenderChart() {
+      const ctx = this.generalGenderRef
+      if (!ctx) return
+
+      const existingChart = Chart.getChart(ctx)
+      if (existingChart) existingChart.destroy()
+
+      const genderData = this.globalData.demographic_analysis.gender_distribution
+      if (!genderData || !genderData.counts) return
+
+      const labels = []
+      const data = []
+      const colors = []
+
+      for (const [gender, count] of Object.entries(genderData.counts)) {
+        labels.push(gender === 'M' ? '♂ Masculino' : '♀ Femenino')
+        data.push(count)
+        colors.push(gender === 'M' ? 'rgba(54, 162, 235, 0.8)' : 'rgba(255, 99, 132, 0.8)')
+      }
+
+      this.charts['generalGender'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: colors
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom' }
+          }
+        }
+      })
+    },
+
+    createGeneralAgeChart() {
+      const ctx = this.generalAgeRef
+      if (!ctx) return
+
+      const existingChart = Chart.getChart(ctx)
+      if (existingChart) existingChart.destroy()
+
+      const ageData = this.globalData.demographic_analysis.age_distribution
+      if (!ageData || !ageData.counts) return
+
+      // Reutilizar lógica de ordenamiento de createAgeChartForZone
+      const labelMappings = {
+        'AgeLess15': '0-15 años', 'Age16-30': '16-30 años', 'Age31-45': '31-45 años',
+        'Age46-60': '46-60 años', 'AgeAbove60': '60+ años',
+        '0-15': '0-15 años', '16-30': '16-30 años', '31-45': '31-45 años',
+        '46-60': '46-60 años', '60+': '60+ años'
+      }
+      
+      const sortOrders = {
+        ntqai_raw: ['AgeLess15', 'Age16-30', 'Age31-45', 'Age46-60', 'AgeAbove60'],
+        ntqai_mapped: ['0-15', '16-30', '31-45', '46-60', '60+']
+      }
+
+      const availableKeys = Object.keys(ageData.counts)
+      let currentOrder = availableKeys
+      if (availableKeys.some(k => k.startsWith('Age'))) currentOrder = sortOrders.ntqai_raw
+      else if (availableKeys.includes('0-15')) currentOrder = sortOrders.ntqai_mapped
+
+      const labels = []
+      const data = []
+
+      currentOrder.forEach(key => {
+        if (ageData.counts[key] !== undefined) {
+          labels.push(labelMappings[key] || key)
+          data.push(ageData.counts[key])
+        }
+      })
+
+      // Agregar restantes
+      availableKeys.forEach(key => {
+        if (!currentOrder.includes(key)) {
+          labels.push(labelMappings[key] || key)
+          data.push(ageData.counts[key])
+        }
+      })
+
+      this.charts['generalAge'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Personas',
+            data: data,
+            backgroundColor: 'rgba(153, 102, 255, 0.8)'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      })
+    },
+
     createZoneCharts() {
       // Prevenir múltiples creaciones simultáneas
       if (this.isCreatingCharts) {
@@ -533,22 +853,23 @@ export default {
     
     destroyCanvasCharts() {
       // Destruir solo los gráficos actualmente en los canvas usando Chart.js API
-      if (this.visitsChartRef) {
-        const chart = Chart.getChart(this.visitsChartRef)
-        if (chart) chart.destroy()
-      }
-      if (this.dwellChartRef) {
-        const chart = Chart.getChart(this.dwellChartRef)
-        if (chart) chart.destroy()
-      }
-      if (this.genderChartRef) {
-        const chart = Chart.getChart(this.genderChartRef)
-        if (chart) chart.destroy()
-      }
-      if (this.ageChartRef) {
-        const chart = Chart.getChart(this.ageChartRef)
-        if (chart) chart.destroy()
-      }
+      const refs = [
+        this.visitsChartRef,
+        this.dwellChartRef,
+        this.genderChartRef,
+        this.ageChartRef,
+        this.generalZoneDistRef,
+        this.generalDwellComparisonRef,
+        this.generalGenderRef,
+        this.generalAgeRef
+      ]
+
+      refs.forEach(ref => {
+        if (ref) {
+          const chart = Chart.getChart(ref)
+          if (chart) chart.destroy()
+        }
+      })
     },
 
     createVisitsChart(zone, data) {
