@@ -86,7 +86,7 @@ function pollStatus() {
 <template>
   <main class="container">
     <header>
-      <h1>🎯 People Tracking System</h1>
+      <h1>🎯 CountAPP </h1>
       <p>Sistema avanzado de seguimiento y análisis de personas con YOLO v8</p>
     </header>
 
